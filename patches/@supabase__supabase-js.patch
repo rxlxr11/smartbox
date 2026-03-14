@@ -1,0 +1,202 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 2daa609c745165966a457849473e8bcf06450e09..3182fe39e90620e91450a2ad14900cc5b502e45c 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -141,15 +141,66 @@ function applySettingDefaults(options, defaults) {
+ * @returns {URL} - The validated base URL.
+ * @throws {Error}
+ */
++function _SupabaseURL(url, base) {
++	var resolved = url;
++	if (base) {
++		var baseStr = typeof base === 'string' ? base : (base.href || String(base));
++		if (!url.match(/^https?:\/\//i)) {
++			var baseNoSlash = baseStr.replace(/\/$/, '');
++			resolved = baseNoSlash + '/' + url.replace(/^\//, '');
++		}
++	}
++	var m = resolved.match(/^(https?:)\/\/([^\/\?#]*)(\/[^\?#]*)?(\?[^#]*)?(#.*)?$/);
++	if (!m) throw new Error('Invalid URL: ' + resolved);
++	var protocol = m[1] || '';
++	var host = m[2] || '';
++	var pathname = m[3] || '/';
++	var search = m[4] || '';
++	var hash = m[5] || '';
++	var hostParts = host.split(':');
++	var hostname = hostParts[0] || '';
++	var origin = protocol + '//' + host;
++	var href = origin + pathname + search + hash;
++	var searchParamsMap = {};
++	if (search) {
++		search.slice(1).split('&').forEach(function(pair) {
++			if (!pair) return;
++			var eqIdx = pair.indexOf('=');
++			var k = eqIdx === -1 ? decodeURIComponent(pair) : decodeURIComponent(pair.slice(0, eqIdx));
++			var v = eqIdx === -1 ? '' : decodeURIComponent(pair.slice(eqIdx + 1));
++			if (!searchParamsMap[k]) searchParamsMap[k] = [];
++			searchParamsMap[k].push(v);
++		});
++	}
++	var searchParams = {
++		_m: searchParamsMap,
++		append: function(k, v) { if (!this._m[k]) this._m[k] = []; this._m[k].push(v); },
++		set: function(k, v) { this._m[k] = [v]; },
++		get: function(k) { return (this._m[k] && this._m[k][0]) || null; },
++		getAll: function(k) { return this._m[k] || []; },
++		has: function(k) { return k in this._m; },
++		delete: function(k) { delete this._m[k]; },
++		toString: function() {
++			var pairs = [];
++			Object.keys(this._m).forEach(function(k) {
++				_SupabaseURL._sp(this._m[k]).forEach(function(v) { pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); }, this);
++			}, this);
++			return pairs.join('&');
++		},
++		forEach: function(cb) {
++			Object.keys(this._m).forEach(function(k) {
++				this._m[k].forEach(function(v) { cb(v, k); });
++			}, this);
++		},
++	};
++	return { protocol: protocol, hostname: hostname, host: host, pathname: pathname, search: search, hash: hash, origin: origin, href: href, searchParams: searchParams, toString: function() { return href; } };
++}
++_SupabaseURL._sp = function(arr) { return arr || []; };
+ function validateSupabaseUrl(supabaseUrl) {
+ 	const trimmedUrl = supabaseUrl === null || supabaseUrl === void 0 ? void 0 : supabaseUrl.trim();
+ 	if (!trimmedUrl) throw new Error("supabaseUrl is required.");
+ 	if (!trimmedUrl.match(/^https?:\/\//i)) throw new Error("Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.");
+-	try {
+-		return new URL(ensureTrailingSlash(trimmedUrl));
+-	} catch (_unused) {
+-		throw Error("Invalid supabaseUrl: Provided URL is malformed.");
+-	}
++	return _SupabaseURL(ensureTrailingSlash(trimmedUrl));
+ }
+ 
+ //#endregion
+@@ -361,11 +412,11 @@ var SupabaseClient = class {
+ 		this.supabaseKey = supabaseKey;
+ 		const baseUrl = validateSupabaseUrl(supabaseUrl);
+ 		if (!supabaseKey) throw new Error("supabaseKey is required.");
+-		this.realtimeUrl = new URL("realtime/v1", baseUrl);
++		this.realtimeUrl = _SupabaseURL("realtime/v1", baseUrl);
+ 		this.realtimeUrl.protocol = this.realtimeUrl.protocol.replace("http", "ws");
+-		this.authUrl = new URL("auth/v1", baseUrl);
+-		this.storageUrl = new URL("storage/v1", baseUrl);
+-		this.functionsUrl = new URL("functions/v1", baseUrl);
++		this.authUrl = _SupabaseURL("auth/v1", baseUrl);
++		this.storageUrl = _SupabaseURL("storage/v1", baseUrl);
++		this.functionsUrl = _SupabaseURL("functions/v1", baseUrl);
+ 		const defaultStorageKey = `sb-${baseUrl.hostname.split(".")[0]}-auth-token`;
+ 		const DEFAULTS = {
+ 			db: DEFAULT_DB_OPTIONS,
+@@ -391,7 +442,7 @@ var SupabaseClient = class {
+ 			accessToken: this._getAccessToken.bind(this)
+ 		}, settings.realtime));
+ 		if (this.accessToken) Promise.resolve(this.accessToken()).then((token) => this.realtime.setAuth(token)).catch((e) => console.warn("Failed to set initial Realtime auth token:", e));
+-		this.rest = new __supabase_postgrest_js.PostgrestClient(new URL("rest/v1", baseUrl).href, {
++		this.rest = new __supabase_postgrest_js.PostgrestClient(_SupabaseURL("rest/v1", baseUrl).href, {
+ 			headers: this.headers,
+ 			schema: settings.db.schema,
+ 			fetch: this.fetch,
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 9a3854efddb4dce6e6538b8a8973edca4a8bbb6b..4d8e587fff32d528030208bfddb4260ee7efe88e 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -145,15 +145,66 @@ function applySettingDefaults(options, defaults) {
+ * @returns {URL} - The validated base URL.
+ * @throws {Error}
+ */
++function _SupabaseURL(url, base) {
++	var resolved = url;
++	if (base) {
++		var baseStr = typeof base === 'string' ? base : (base.href || String(base));
++		if (!url.match(/^https?:\/\//i)) {
++			var baseNoSlash = baseStr.replace(/\/$/, '');
++			resolved = baseNoSlash + '/' + url.replace(/^\//, '');
++		}
++	}
++	var m = resolved.match(/^(https?:)\/\/([^\/\?#]*)(\/[^\?#]*)?(\?[^#]*)?(#.*)?$/);
++	if (!m) throw new Error('Invalid URL: ' + resolved);
++	var protocol = m[1] || '';
++	var host = m[2] || '';
++	var pathname = m[3] || '/';
++	var search = m[4] || '';
++	var hash = m[5] || '';
++	var hostParts = host.split(':');
++	var hostname = hostParts[0] || '';
++	var origin = protocol + '//' + host;
++	var href = origin + pathname + search + hash;
++	var searchParamsMap = {};
++	if (search) {
++		search.slice(1).split('&').forEach(function(pair) {
++			if (!pair) return;
++			var eqIdx = pair.indexOf('=');
++			var k = eqIdx === -1 ? decodeURIComponent(pair) : decodeURIComponent(pair.slice(0, eqIdx));
++			var v = eqIdx === -1 ? '' : decodeURIComponent(pair.slice(eqIdx + 1));
++			if (!searchParamsMap[k]) searchParamsMap[k] = [];
++			searchParamsMap[k].push(v);
++		});
++	}
++	var searchParams = {
++		_m: searchParamsMap,
++		append: function(k, v) { if (!this._m[k]) this._m[k] = []; this._m[k].push(v); },
++		set: function(k, v) { this._m[k] = [v]; },
++		get: function(k) { return (this._m[k] && this._m[k][0]) || null; },
++		getAll: function(k) { return this._m[k] || []; },
++		has: function(k) { return k in this._m; },
++		delete: function(k) { delete this._m[k]; },
++		toString: function() {
++			var pairs = [];
++			Object.keys(this._m).forEach(function(k) {
++				_SupabaseURL._sp(this._m[k]).forEach(function(v) { pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); }, this);
++			}, this);
++			return pairs.join('&');
++		},
++		forEach: function(cb) {
++			Object.keys(this._m).forEach(function(k) {
++				this._m[k].forEach(function(v) { cb(v, k); });
++			}, this);
++		},
++	};
++	return { protocol: protocol, hostname: hostname, host: host, pathname: pathname, search: search, hash: hash, origin: origin, href: href, searchParams: searchParams, toString: function() { return href; } };
++}
++_SupabaseURL._sp = function(arr) { return arr || []; };
+ function validateSupabaseUrl(supabaseUrl) {
+ 	const trimmedUrl = supabaseUrl === null || supabaseUrl === void 0 ? void 0 : supabaseUrl.trim();
+ 	if (!trimmedUrl) throw new Error("supabaseUrl is required.");
+ 	if (!trimmedUrl.match(/^https?:\/\//i)) throw new Error("Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.");
+-	try {
+-		return new URL(ensureTrailingSlash(trimmedUrl));
+-	} catch (_unused) {
+-		throw Error("Invalid supabaseUrl: Provided URL is malformed.");
+-	}
++	return _SupabaseURL(ensureTrailingSlash(trimmedUrl));
+ }
+ 
+ //#endregion
+@@ -365,11 +416,11 @@ var SupabaseClient = class {
+ 		this.supabaseKey = supabaseKey;
+ 		const baseUrl = validateSupabaseUrl(supabaseUrl);
+ 		if (!supabaseKey) throw new Error("supabaseKey is required.");
+-		this.realtimeUrl = new URL("realtime/v1", baseUrl);
++		this.realtimeUrl = _SupabaseURL("realtime/v1", baseUrl);
+ 		this.realtimeUrl.protocol = this.realtimeUrl.protocol.replace("http", "ws");
+-		this.authUrl = new URL("auth/v1", baseUrl);
+-		this.storageUrl = new URL("storage/v1", baseUrl);
+-		this.functionsUrl = new URL("functions/v1", baseUrl);
++		this.authUrl = _SupabaseURL("auth/v1", baseUrl);
++		this.storageUrl = _SupabaseURL("storage/v1", baseUrl);
++		this.functionsUrl = _SupabaseURL("functions/v1", baseUrl);
+ 		const defaultStorageKey = `sb-${baseUrl.hostname.split(".")[0]}-auth-token`;
+ 		const DEFAULTS = {
+ 			db: DEFAULT_DB_OPTIONS,
+@@ -395,7 +446,7 @@ var SupabaseClient = class {
+ 			accessToken: this._getAccessToken.bind(this)
+ 		}, settings.realtime));
+ 		if (this.accessToken) Promise.resolve(this.accessToken()).then((token) => this.realtime.setAuth(token)).catch((e) => console.warn("Failed to set initial Realtime auth token:", e));
+-		this.rest = new PostgrestClient(new URL("rest/v1", baseUrl).href, {
++		this.rest = new PostgrestClient(_SupabaseURL("rest/v1", baseUrl).href, {
+ 			headers: this.headers,
+ 			schema: settings.db.schema,
+ 			fetch: this.fetch,
