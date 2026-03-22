@@ -55,9 +55,9 @@ onMounted(() => {})
   <!-- 带标题和返回的导航栏 -->
   <view :style="{ paddingTop: `${safeAreaInsets?.top}px`, backgroundColor: bgColor }">
     <view class="entire-nav" :style="{ height: `${height}px` }">
-      <view v-if="!customLeft" class="left" style="margin-left: 25rpx" @click="back">
-        <text class="back-icon" :style="{ color: iconColor }">❮</text>
-        <text class="title-text" :style="{ color: iconColor }">
+      <view v-if="!customLeft" class="left large-bold-title" style="margin-left: 25rpx" @click="back">
+        <view class="i-fa6-solid:chevron-left text-32rpx" :style="{ color: iconColor }" />
+        <text style="margin-left: 20rpx" class="large-bold-title min-w-100rpx">
           {{ title }}
         </text>
       </view>
@@ -82,17 +82,6 @@ onMounted(() => {})
     display: flex;
     min-width: 300rpx;
     align-items: center;
-
-    .back-icon {
-      font-size: 36rpx;
-      font-weight: bold;
-    }
-    .title-text {
-      font-size: 34rpx;
-      font-weight: bold;
-      margin-left: 20rpx;
-      min-width: 100rpx;
-    }
   }
   .right {
     height: 40rpx;

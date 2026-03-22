@@ -19,59 +19,92 @@ export const REVERSE_TODO_TYPE_MAP: Record<number, TodoCategory> = {
 export interface TodoTable {
   id: number;
   created_at: string;
-  if_delete?: boolean;
+  is_deleted?: boolean;
   title: string;
-  desc?: string;
+  description?: string;
   type: number;
-  if_use?: boolean;
+  is_active?: boolean;
   deadline?: string;
-  max?: number;
-  progress?: number;
+  target_value?: number;
+  current_value?: number;
   unit?: string;
-  if_complete?: boolean;
-  days?: number;
+  is_completed?: boolean;
+  completed_at?: string;
+  streak_days?: number;
   label?: string;
+  scheduled_start_time?: string;
+  estimated_duration?: number;
+  priority?: number;
+  urgency_score?: number;
+  updated_at?: string;
+  user_id?: string;
+  repeat_pattern?: any; // any to accommodate the PostgreSQL array string '{0}' format
 }
 
 // Frontend interface that extends the DB table but adds helper fields
 export interface TodoItem extends TodoTable {
   // Computed helpers for UI convenience
   category: TodoCategory;
-  
-  // Mapping old fields to new schema for backward compatibility in UI components
-  // These are optional because we should migrate to using the TodoTable fields directly
-  is_completed?: boolean; // Maps to if_complete
-  current_count?: number; // Maps to progress
-  target_count?: number;  // Maps to max
-  progress_percentage?: number; // Calculated from progress/max * 100
+  progress_percentage?: number; // Calculated from current_value/target_value * 100
 }
 
 export interface CreateTodoDTO {
   type: number;
   title: string;
-  if_complete?: boolean;
-  progress?: number;
-  max?: number;
-  // Optional new fields
-  desc?: string;
+  is_completed?: boolean;
+  current_value?: number;
+  target_value?: number;
+  description?: string;
   deadline?: string;
   unit?: string;
-  if_use?: boolean;
-  days?: number;
+  is_active?: boolean;
+  streak_days?: number;
   label?: string;
+  scheduled_start_time?: string;
+  estimated_duration?: number;
+  priority?: number;
+  urgency_score?: number;
+  repeat_pattern?: any;
 }
 
 export interface UpdateTodoDTO {
   type?: number;
   title?: string;
-  if_complete?: boolean;
-  progress?: number;
-  max?: number;
-  if_delete?: boolean;
-  desc?: string;
+  is_completed?: boolean;
+  completed_at?: string | null;
+  current_value?: number;
+  target_value?: number;
+  is_deleted?: boolean;
+  description?: string;
   deadline?: string;
   unit?: string;
-  if_use?: boolean;
-  days?: number;
+  is_active?: boolean;
+  streak_days?: number;
   label?: string;
+  scheduled_start_time?: string;
+  estimated_duration?: number;
+  priority?: number;
+  urgency_score?: number;
+  repeat_pattern?: any;
+}
+
+export interface TaskRecord {
+  id: number;
+  task_id: number;
+  record_date: string;
+  completed_at: string;
+  duration?: number;
+  value?: number;
+  note?: string;
+  is_success?: boolean;
+  created_at: string;
+}
+
+export interface CreateTaskRecordDTO {
+  task_id: number;
+  record_date: string;
+  duration?: number;
+  value?: number;
+  note?: string;
+  is_success?: boolean;
 }
