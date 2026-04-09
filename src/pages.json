@@ -17,6 +17,18 @@
       "style": {
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/video/video",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/game/game",
+      "style": {
+        "navigationStyle": "custom"
+      }
     }
   ],
   "subPackages": [
@@ -25,6 +37,12 @@
       "pages": [
         {
           "path": "todoCharts/todoCharts",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "game/SchulteTable/SchulteTable",
           "style": {
             "navigationStyle": "custom"
           }
