@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import BackBar from '@/components/BackBar/BackBar.vue'
 import { API } from '@/api'
-import type { TodoItem, TodoCategory } from '@/types/todo'
-import { TODO_TYPE_MAP } from '@/types/todo'
+import type { TodoItem } from '@/types/todo'
 import { onShow } from "@dcloudio/uni-app";
-import AddTaskDialog from './AddTaskDialog.vue'
-import EditTaskDialog from './EditTaskDialog.vue'
 import { withAsyncLock } from '@/utils/index'
 
 const todos = ref<TodoItem[]>([])
@@ -57,83 +54,17 @@ const formatDate = (dateStr?: string) => {
 const todoTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'todo')))
 const progressTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'progress')))
 
-// --- Modal State & Logic ---
-const showModal = ref(false)
-const initialModalType = ref<number | undefined>(undefined)
-
-const openModal = (category?: string | Event) => {
-  initialModalType.value = undefined
-  if (typeof category === 'string') {
-    if (category === 'habit') {
-      initialModalType.value = isPositiveHabit.value ? 1 : 0
-    }
-  }
-  showModal.value = true
-}
-
-const handleSaveTask = async (payload: any) => {
-  uni.showLoading({ title: '保存中...' })
-  try {
-    await API.todo.addTodo(payload)
-    await fetchTodos()
-    showModal.value = false
-    uni.hideLoading()
-    uni.showToast({ title: '添加成功', icon: 'success' })
-  } catch (e) {
-    console.error('Failed to add todo:', e)
-    uni.hideLoading()
-    uni.showToast({ title: '添加失败', icon: 'none' })
-  }
-}
-// --- End Modal Logic ---
-
-// --- Edit Modal Logic ---
-const showEditModal = ref(false)
-const editModalTask = ref<TodoItem | null>(null)
-
-const openEditModal = (task: TodoItem) => {
-  editModalTask.value = task
-  showEditModal.value = true
-}
-
-const handleEditSave = async (id: number, payload: any) => {
-  uni.showLoading({ title: '保存中...' })
-  try {
-    await API.todo.updateTodo(id, payload)
-    await fetchTodos()
-    showEditModal.value = false
-    uni.hideLoading()
-    uni.showToast({ title: '修改成功', icon: 'success' })
-  } catch (e) {
-    console.error('Failed to update todo:', e)
-    uni.hideLoading()
-    uni.showToast({ title: '修改失败', icon: 'none' })
-  }
-}
-
-const handleEditDelete = (id: number) => {
-  uni.showModal({
-    title: '确认删除',
-    content: '确定要删除这条记录吗？',
-    success: async (res) => {
-      if (res.confirm) {
-        uni.showLoading({ title: '删除中...' })
-        try {
-          await API.todo.deleteTodo(id)
-          await fetchTodos()
-          showEditModal.value = false
-          uni.hideLoading()
-          uni.showToast({ title: '已删除', icon: 'success' })
-        } catch (e) {
-          console.error('Failed to delete todo:', e)
-          uni.hideLoading()
-          uni.showToast({ title: '删除失败', icon: 'none' })
-        }
-      }
-    }
+const openAddPage = () => {
+  uni.navigateTo({
+    url: '/pages-sub/editTodo/editTodo?mode=add'
   })
 }
-// --- End Edit Modal Logic ---
+
+const openEditPage = (task: TodoItem) => {
+  uni.navigateTo({
+    url: `/pages-sub/editTodo/editTodo?mode=edit&id=${task.id}`
+  })
+}
 
 const fetchTodos = async () => {
   loading.value = true
@@ -165,28 +96,6 @@ const handleToggle = withAsyncLock(async (task: TodoItem) => {
     uni.showToast({ title: '更新失败', icon: 'none' })
   }
 })
-
-const handleDelete = (id: number) => {
-  uni.showModal({
-    title: '确认删除',
-    content: '确定要删除这条记录吗？',
-    success: async (res) => {
-      if (res.confirm) {
-        uni.showLoading({ title: '删除中...' })
-        try {
-          await API.todo.deleteTodo(id)
-          await fetchTodos()
-          uni.hideLoading()
-          uni.showToast({ title: '已删除', icon: 'success' })
-        } catch (e) {
-          console.error('Failed to delete todo:', e)
-          uni.hideLoading()
-          uni.showToast({ title: '删除失败', icon: 'none' })
-        }
-      }
-    }
-  })
-}
 
 // --- Progress Modal ---
 const showProgressModal = ref(false)
@@ -265,7 +174,7 @@ onShow(() => {
         </template>
         <template #right>
           <view class="flex items-center justify-center text-[32rpx] font-bold text-[#0f172a] h-full"
-            @click="openModal">新增</view>
+            @click="openAddPage">新增</view>
         </template>
       </BackBar>
       <!-- Top Navigation -->
@@ -275,7 +184,7 @@ onShow(() => {
         <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="goToPage('todoCharts')">
           数据
         </view>
-        <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="goToPage('todoEdit')">
+        <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="openAddPage">
           编辑</view>
       </view>
     </template>
@@ -293,7 +202,7 @@ onShow(() => {
             <view class="flex flex-col gap-[16rpx]">
               <view v-for="task in urgentTasks" :key="task.id"
                 class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#991b1b]"
-                @longpress="openEditModal(task)" @click="handleToggle(task)">
+                @longpress="openEditPage(task)" @click="handleToggle(task)">
                 <view class="flex items-center">
                   <view
                     class="w-[32rpx] h-[32rpx] border-[2rpx] border-solid border-[#991b1b] rounded-[6rpx] flex items-center justify-center shrink-0">
@@ -331,7 +240,7 @@ onShow(() => {
             <view class="flex flex-col gap-[16rpx]">
               <view v-for="task in habitTasks" :key="task.id"
                 class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#166534] relative"
-                @longpress="openEditModal(task)" @click="handleToggle(task)">
+                @longpress="openEditPage(task)" @click="handleToggle(task)">
                 <view class="flex items-center">
                   <view
                     class="w-[32rpx] h-[32rpx] border-[2rpx] border-solid border-[#166534] rounded-[6rpx] flex items-center justify-center shrink-0">
@@ -362,7 +271,7 @@ onShow(() => {
             <view class="flex flex-col gap-[16rpx]">
               <view v-for="task in todoTasks" :key="task.id"
                 class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#075985]"
-                @longpress="openEditModal(task)" @click="handleToggle(task)">
+                @longpress="openEditPage(task)" @click="handleToggle(task)">
                 <view class="flex items-center">
                   <view
                     class="w-[32rpx] h-[32rpx] border-[2rpx] border-solid border-[#075985] rounded-[6rpx] flex items-center justify-center shrink-0">
@@ -391,7 +300,7 @@ onShow(() => {
           <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
             <view class="flex flex-col gap-[16rpx]">
               <view v-for="task in progressTasks" :key="task.id"
-                class="rounded-[16rpx] p-[16rpx] flex flex-col bg-white-50" @longpress="openEditModal(task)"
+                class="rounded-[16rpx] p-[16rpx] flex flex-col bg-white-50" @longpress="openEditPage(task)"
                 @click="openProgressModal(task)">
                 <view class="flex justify-between text-[20rpx] mb-[8rpx] text-[#6b21a8]">
                   <text class="flex-1 overflow-hidden whitespace-nowrap text-ellipsis mr-[10rpx]"
@@ -420,13 +329,6 @@ onShow(() => {
         </view>
       </view>
     </view>
-
-    <!-- Add Task Modal Component -->
-    <AddTaskDialog v-model:visible="showModal" :initial-type="initialModalType" @save="handleSaveTask" />
-
-    <!-- Edit Task Modal Component -->
-    <EditTaskDialog v-model:visible="showEditModal" :task="editModalTask" @save="handleEditSave"
-      @delete="handleEditDelete" />
 
     <!-- Progress Update Modal -->
     <view v-if="showProgressModal"

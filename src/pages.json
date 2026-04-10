@@ -42,6 +42,12 @@
           }
         },
         {
+          "path": "editTodo/editTodo",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
           "path": "game/SchulteTable/SchulteTable",
           "style": {
             "navigationStyle": "custom"
