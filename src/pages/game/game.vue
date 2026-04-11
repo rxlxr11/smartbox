@@ -26,7 +26,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import BackBar from "@/components/BackBar/BackBar.vue";
-import { getGames } from '@/api/game/game';
+import { getGames } from '@/lib/game/game';
 
 type GameCard = {
   id: string;
@@ -36,27 +36,19 @@ type GameCard = {
   path: string;
 };
 
-const gameRouteMap: Record<string, string> = {
-  'schulte-grid': '/pages-sub/game/SchulteTable/SchulteTable'
-};
-
-const gameIconMap: Record<string, string> = {
-  'schulte-grid': '🔢'
-};
-
 const games = ref<GameCard[]>([]);
 
 const loadGames = async () => {
   try {
     const list = await getGames(true);
     games.value = list
-      .filter(item => Boolean(gameRouteMap[item.id]))
+      .filter(item => Boolean(item.path))
       .map(item => ({
         id: item.id,
         name: item.name,
         description: item.description ?? '暂无描述',
-        icon: gameIconMap[item.id] ?? '🎮',
-        path: gameRouteMap[item.id]
+        icon: item.icon ?? '🎮',
+        path: item.path as string
       }));
   } catch (error) {
     console.error('Failed to load game list:', error);

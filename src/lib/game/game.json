@@ -1,0 +1,66 @@
+[
+  {
+    "id": "schulte-grid",
+    "name": "舒尔特方格",
+    "description": "经典舒尔特方格注意力训练",
+    "icon": "🔢",
+    "path": "/pages-sub/game/SchulteTable/SchulteTable",
+    "is_active": true,
+    "max_errors": null,
+    "difficulty_dict": {
+      "easy": {
+        "label": "简单 (3x3)",
+        "value": "easy",
+        "params": {
+          "size": 3
+        }
+      },
+      "normal": {
+        "label": "普通 (4x4)",
+        "value": "normal",
+        "params": {
+          "size": 4
+        }
+      },
+      "hard": {
+        "label": "困难 (5x5)",
+        "value": "hard",
+        "params": {
+          "size": 5
+        }
+      }
+    }
+  },
+  {
+    "id": "sliding-puzzle",
+    "name": "数字华容道",
+    "description": "移动数字方块，按顺序完成拼图",
+    "icon": "🧩",
+    "path": "/pages-sub/game/SlidingPuzzle/SlidingPuzzle",
+    "is_active": true,
+    "max_errors": null,
+    "difficulty_dict": {
+      "easy": {
+        "label": "简单 (3x3)",
+        "value": "easy",
+        "params": {
+          "size": 3
+        }
+      },
+      "normal": {
+        "label": "普通 (4x4)",
+        "value": "normal",
+        "params": {
+          "size": 4
+        }
+      },
+      "hard": {
+        "label": "困难 (5x5)",
+        "value": "hard",
+        "params": {
+          "size": 5
+        }
+      }
+    }
+  }
+]

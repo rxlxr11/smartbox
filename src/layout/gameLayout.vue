@@ -16,17 +16,16 @@
     <view class="flex-1 relative overflow-hidden">
       <slot></slot>
 
-      <view
+      <GameDialog
         v-if="game.status === 'paused'"
-        class="absolute top-0 left-0 right-0 bottom-0 bg-[rgba(148,153,166,0.62)] backdrop-blur-[6rpx] flex flex-col justify-center items-center z-30"
+        :visible="game.status === 'paused'"
+        title="游戏暂停"
+        description="休息一下。点击下方按钮可继续训练，或重开本局重新挑战。"
+        icon-class="i-fa6-solid:pause"
+        icon-wrap-class="bg-[#e6e4ff]"
+        :show-top-line="false"
       >
-        <view class="w-[84%] max-w-[640rpx] bg-[#f8f8fb] border-[2rpx] border-solid border-[#ececf5] rounded-[48rpx] px-[48rpx] pt-[44rpx] pb-[40rpx] shadow-[0_24rpx_72rpx_rgba(15,23,42,0.22)] flex flex-col items-center">
-          <view class="w-[92rpx] h-[92rpx] rounded-full bg-[#e6e4ff] flex items-center justify-center mb-[28rpx]">
-            <view class="i-fa6-solid:pause text-[38rpx] text-[#4f46e5]"></view>
-          </view>
-          <text class="text-[48rpx] font-bold text-[#202534] mb-[18rpx]">游戏暂停</text>
-          <text class="text-[25rpx] text-[#6b7280] leading-[1.7] text-center mb-[34rpx]">休息一下。点击下方按钮可继续训练，或重开本局重新挑战。</text>
-
+        <template #actions>
           <button
             class="w-full h-[88rpx] mb-[20rpx] border-none rounded-[999rpx] text-white text-[32rpx] leading-[88rpx] bg-[linear-gradient(90deg,#5d5bf6_0%,#4338ca_100%)] shadow-[0_10rpx_26rpx_rgba(79,70,229,0.35)]"
             @click="game.resume()"
@@ -36,10 +35,12 @@
             class="w-full h-[88rpx] border-[2rpx] border-solid border-[#e3e5ef] rounded-[999rpx] bg-[#f8f8fb] text-[#4f46e5] text-[32rpx] leading-[84rpx]"
             @click="handlePauseRestart"
           >↻ 重新开始</button>
+        </template>
 
+        <template #footer>
           <text class="text-[24rpx] text-[#a1a7b5] mt-[26rpx]">退出当前局</text>
-        </view>
-      </view>
+        </template>
+      </GameDialog>
     </view>
 
     <view class="shrink-0 bg-white border-t-[2rpx] border-solid border-[#eee] px-[28rpx] pt-[16rpx] pb-[calc(16rpx+env(safe-area-inset-bottom))] z-20">
@@ -72,6 +73,7 @@
 import { computed } from 'vue';
 import type { Game } from '@/types/game';
 import BackBar from '@/components/BackBar/BackBar.vue';
+import GameDialog from '@/components/GameDialog/GameDialog.vue';
 
 type PickerChangeEvent = {
   detail: {

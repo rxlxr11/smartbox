@@ -52,6 +52,12 @@
           "style": {
             "navigationStyle": "custom"
           }
+        },
+        {
+          "path": "game/SlidingPuzzle/SlidingPuzzle",
+          "style": {
+            "navigationStyle": "custom"
+          }
         }
       ]
     }

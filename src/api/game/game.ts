@@ -1,22 +1,5 @@
 import { supabase } from '@/lib/supabase';
 
-export interface GameDifficulty {
-  label: string;
-  value: string;
-  params?: Record<string, unknown>;
-}
-
-export interface GameInfo {
-  id: string;
-  name: string;
-  description?: string | null;
-  difficulty_levels?: GameDifficulty[] | null;
-  max_errors?: number | null;
-  is_active?: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
-
 export interface GameScore {
   id?: number;
   user_id?: string;
@@ -27,14 +10,6 @@ export interface GameScore {
   duration?: number;
   extra_data?: Record<string, unknown> | null;
   created_at?: string;
-}
-
-export interface GameRankingItem {
-  score: number;
-  user_id: string | null;
-  duration: number | null;
-  played_at: string;
-  level: number | null;
 }
 
 const getSingleRow = <T>(data: unknown): T | null => {
@@ -115,63 +90,7 @@ export async function getPersonalHighScore(gameId: string, isAscending: boolean 
   }
 }
 
-/**
- * 获取排行榜
- * @param gameId 游戏ID
- * @param limit 获取前几名
- * @param isAscending 是否升序（例如时间类的记录是升序，分数类的记录是降序）
- */
-export async function getGameRanking(gameId: string, limit: number = 10, isAscending: boolean = false) {
-  try {
-    const { data, error } = await supabase.rpc('game_get_ranking', {
-      p_game_id: gameId,
-      p_limit: limit,
-      p_is_ascending: isAscending,
-    });
-
-    if (error) {
-      console.error('Error fetching game ranking:', error);
-      throw error;
-    }
-
-    return (data as GameRankingItem[]) || [];
-  } catch (error) {
-    console.error('Failed to get game ranking:', error);
-    return [];
-  }
-}
-
-export async function getGames(onlyActive: boolean = true) {
-  const { data, error } = await supabase.rpc('game_get_games', {
-    p_only_active: onlyActive,
-  });
-
-  if (error) {
-    console.error('Error fetching game list:', error);
-    throw error;
-  }
-
-  return (data as GameInfo[]) || [];
-}
-
-export async function getGameById(gameId: string) {
-  const { data, error } = await supabase.rpc('game_get_game_by_id', {
-    p_game_id: gameId,
-  });
-
-  if (error) {
-    console.error('Error fetching game detail:', error);
-    throw error;
-  }
-
-  return getSingleRow<GameInfo>(data);
-}
-
-
 export const gameApi = {
-  getGames,
-  getGameById,
   recordGameScore,
   getPersonalHighScore,
-  getGameRanking,
 };
