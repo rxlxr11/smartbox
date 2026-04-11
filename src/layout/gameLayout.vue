@@ -1,77 +1,138 @@
 <template>
-    <view class="flex flex-col h-[100vh] bg-[#fafafa]">
-        <!-- 顶部控制栏 -->
-        <BackBar :title="game.name" bgColor="#ffffff" iconColor="#333">
-            <template #right>
-                <view class="flex items-center gap-[20rpx]">
-                    <text v-if="game.maxErrors !== null" class="text-[24rpx] text-[#666]">
-                        错误: {{ game.currentErrors }}/{{ game.maxErrors }}
-                    </text>
-                    <text v-else class="text-[24rpx] text-[#666]">
-                        错误: {{ game.currentErrors }}
-                    </text>
-                    <text class="text-[24rpx] text-[#666] ml-[10rpx]">最佳: {{ game.highScore }}</text>
-                </view>
-            </template>
-        </BackBar>
-
-        <view
-            class="flex justify-center gap-[30rpx] p-[20rpx] bg-white border-t-[2rpx] border-solid border-[#eee] shadow-[0_4rpx_8rpx_rgba(0,0,0,0.02)] z-10">
-            <button
-                class="text-[28rpx] py-[10rpx] px-[40rpx] m-0 rounded-[40rpx] bg-[#f0f0f0] border-[2rpx] border-solid border-[#ddd] active:bg-[#e0e0e0] leading-normal"
-                @click="handleAction">
-                {{ game.status === 'playing' ? '暂停' : (game.status === 'paused' ? '继续' : '开始') }}
-            </button>
-            <button
-                class="text-[28rpx] py-[10rpx] px-[40rpx] m-0 rounded-[40rpx] bg-[#f0f0f0] border-[2rpx] border-solid border-[#ddd] active:bg-[#e0e0e0] leading-normal"
-                @click="game.restart()" v-if="game.status !== 'idle'">重新开始</button>
-        </view>
-
-        <!-- 中部主体 -->
-        <view class="flex-1 relative flex justify-center items-center overflow-hidden">
-            <slot></slot>
-
-            <!-- 暂停遮罩 -->
-            <view v-if="game.status === 'paused'"
-                class="absolute top-0 left-0 right-0 bottom-0 bg-[rgba(255,255,255,0.8)] flex flex-col justify-center items-center z-10">
-                <text class="text-[40rpx] font-bold text-[#333] mb-[40rpx]">游戏已暂停</text>
-                <button class="bg-[#007aff] text-white border-none rounded-[40rpx] py-[20rpx] px-[60rpx] leading-normal"
-                    @click="game.resume()">继续游戏</button>
-            </view>
-        </view>
-
-        <!-- 底部难度选择 -->
-        <view class="p-[40rpx] bg-white border-t-[2rpx] border-solid border-[#eee]"
-            v-if="game.status === 'idle' || game.status === 'ended'">
-            <text class="text-[28rpx] text-[#666] mb-[20rpx] block">选择难度：</text>
-            <view class="flex gap-[20rpx]">
-                <view v-for="(config, key) in game.difficultyDict" :key="key"
-                    class="flex-1 text-center py-[20rpx] bg-[#f5f5f5] rounded-[16rpx] text-[28rpx] text-[#333] border-[2rpx] border-solid border-transparent"
-                    :class="{ 'bg-[#e6f2ff] text-[#007aff] border-[#007aff]': game.currentDifficulty === key }"
-                    @click="game.setDifficulty(String(key))">
-                    {{ config.label }}
-                </view>
-            </view>
-        </view>
+  <view class="flex flex-col h-[100vh] bg-[#fafafa]">
+    <view class="shrink-0 bg-white border-b-[2rpx] border-solid border-[#f0f0f0] z-20">
+      <BackBar :title="game.name" bgColor="#ffffff" iconColor="#333" />
+      <view class="px-[28rpx] pb-[20rpx]">
+        <slot name="top">
+          <view class="flex items-center justify-between bg-[#f8fafc] rounded-[16rpx] px-[20rpx] py-[14rpx]">
+            <text class="text-[24rpx] text-[#666]">成绩记录：{{ game.highScore || '--' }}</text>
+            <text v-if="game.maxErrors !== null" class="text-[24rpx] text-[#666]">错误次数：{{ game.currentErrors }}/{{ game.maxErrors }}</text>
+            <text v-else class="text-[24rpx] text-[#666]">错误次数：{{ game.currentErrors }}</text>
+          </view>
+        </slot>
+      </view>
     </view>
+
+    <view class="flex-1 relative overflow-hidden">
+      <slot></slot>
+
+      <view
+        v-if="game.status === 'paused'"
+        class="absolute top-0 left-0 right-0 bottom-0 bg-[rgba(148,153,166,0.62)] backdrop-blur-[6rpx] flex flex-col justify-center items-center z-30"
+      >
+        <view class="w-[84%] max-w-[640rpx] bg-[#f8f8fb] border-[2rpx] border-solid border-[#ececf5] rounded-[48rpx] px-[48rpx] pt-[44rpx] pb-[40rpx] shadow-[0_24rpx_72rpx_rgba(15,23,42,0.22)] flex flex-col items-center">
+          <view class="w-[92rpx] h-[92rpx] rounded-full bg-[#e6e4ff] flex items-center justify-center mb-[28rpx]">
+            <view class="i-fa6-solid:pause text-[38rpx] text-[#4f46e5]"></view>
+          </view>
+          <text class="text-[48rpx] font-bold text-[#202534] mb-[18rpx]">游戏暂停</text>
+          <text class="text-[25rpx] text-[#6b7280] leading-[1.7] text-center mb-[34rpx]">休息一下。点击下方按钮可继续训练，或重开本局重新挑战。</text>
+
+          <button
+            class="w-full h-[88rpx] mb-[20rpx] border-none rounded-[999rpx] text-white text-[32rpx] leading-[88rpx] bg-[linear-gradient(90deg,#5d5bf6_0%,#4338ca_100%)] shadow-[0_10rpx_26rpx_rgba(79,70,229,0.35)]"
+            @click="game.resume()"
+          >▶ 继续游戏</button>
+
+          <button
+            class="w-full h-[88rpx] border-[2rpx] border-solid border-[#e3e5ef] rounded-[999rpx] bg-[#f8f8fb] text-[#4f46e5] text-[32rpx] leading-[84rpx]"
+            @click="handlePauseRestart"
+          >↻ 重新开始</button>
+
+          <text class="text-[24rpx] text-[#a1a7b5] mt-[26rpx]">退出当前局</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="shrink-0 bg-white border-t-[2rpx] border-solid border-[#eee] px-[28rpx] pt-[16rpx] pb-[calc(16rpx+env(safe-area-inset-bottom))] z-20">
+      <slot name="bottom">
+        <view class="flex items-center gap-[24rpx]">
+          <view class="flex items-center gap-[24rpx]">
+            <view class="flex flex-col items-center justify-center w-[92rpx]" @click="handleAction">
+              <view :class="actionIconClass" class="text-[38rpx] text-[#007aff]"></view>
+              <text class="text-[22rpx] text-[#4b5563] mt-[4rpx]">{{ actionText }}</text>
+            </view>
+            <view class="flex flex-col items-center justify-center w-[92rpx]" @click="handleRestart">
+              <view class="i-fa6-solid:rotate-right text-[38rpx] text-[#007aff]"></view>
+              <text class="text-[22rpx] text-[#4b5563] mt-[4rpx]">重开</text>
+            </view>
+          </view>
+
+          <picker class="flex-1" mode="selector" :range="difficultyLabels" :value="difficultyIndex" @change="handleDifficultyChange">
+            <view class="h-[72rpx] rounded-[14rpx] bg-[#f8fafc] border-[2rpx] border-solid border-[#e5e7eb] px-[20rpx] flex items-center justify-between">
+              <text class="text-[24rpx] text-[#374151]">难度：{{ difficultyLabels[difficultyIndex] || '请选择' }}</text>
+              <view class="i-fa6-solid:caret-down text-[22rpx] text-[#6b7280]"></view>
+            </view>
+          </picker>
+        </view>
+      </slot>
+    </view>
+  </view>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { Game } from '@/types/game';
 import BackBar from '@/components/BackBar/BackBar.vue';
 
+type PickerChangeEvent = {
+  detail: {
+    value: number | string;
+  };
+};
+
 const props = defineProps<{
-    game: Game;
+  game: Game;
 }>();
 
+const difficultyKeys = computed(() => Object.keys(props.game.difficultyDict));
+
+const difficultyLabels = computed(() => difficultyKeys.value.map((key) => props.game.difficultyDict[key].label));
+
+const difficultyIndex = computed(() => {
+  const index = difficultyKeys.value.indexOf(props.game.currentDifficulty);
+  return index >= 0 ? index : 0;
+});
+
+const actionText = computed(() => {
+  if (props.game.status === 'playing') return '暂停';
+  if (props.game.status === 'paused') return '继续';
+  return '开始';
+});
+
+const actionIconClass = computed(() => {
+  if (props.game.status === 'playing') return 'i-fa6-solid:pause';
+  return 'i-fa6-solid:play';
+});
+
 const handleAction = () => {
-    if (props.game.status === 'playing') {
-        props.game.pause();
-    } else if (props.game.status === 'paused') {
-        props.game.resume();
-    } else {
-        props.game.start();
-    }
+  if (props.game.status === 'playing') {
+    props.game.pause();
+    return;
+  }
+
+  if (props.game.status === 'paused') {
+    props.game.resume();
+    return;
+  }
+
+  props.game.start();
+};
+
+const handleRestart = () => {
+  props.game.restart();
+};
+
+const handlePauseRestart = () => {
+  props.game.restart();
+};
+
+const handleDifficultyChange = (event: PickerChangeEvent) => {
+  const picked = Number(event.detail.value);
+  if (Number.isNaN(picked) || picked < 0 || picked >= difficultyKeys.value.length) {
+    return;
+  }
+
+  props.game.setDifficulty(difficultyKeys.value[picked]);
+  props.game.restart();
 };
 </script>
 

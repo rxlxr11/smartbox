@@ -8,6 +8,18 @@ import { withAsyncLock } from '@/utils/index'
 
 const todos = ref<TodoItem[]>([])
 const loading = ref(false)
+const paging = ref<any>(null)
+
+const urgentTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'urgent')))
+const pHabitTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'positive_habit')))
+const nHabitTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'negative_habit')))
+
+const isPositiveHabit = ref(true)
+const habitTasks = computed(() => isPositiveHabit.value ? pHabitTasks.value : nHabitTasks.value)
+
+
+const todoTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'todo')))
+const progressTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'progress')))
 
 const sortTasks = (tasks: TodoItem[]) => {
   return [...tasks].sort((a, b) => {
@@ -31,12 +43,6 @@ const sortTasks = (tasks: TodoItem[]) => {
   });
 }
 
-const urgentTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'urgent')))
-const pHabitTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'positive_habit')))
-const nHabitTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'negative_habit')))
-
-const isPositiveHabit = ref(true)
-const habitTasks = computed(() => isPositiveHabit.value ? pHabitTasks.value : nHabitTasks.value)
 const toggleHabitType = () => {
   isPositiveHabit.value = !isPositiveHabit.value
 }
@@ -51,20 +57,7 @@ const formatDate = (dateStr?: string) => {
   return `${m}-${d} ${h}:${min}`
 }
 
-const todoTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'todo')))
-const progressTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'progress')))
 
-const openAddPage = () => {
-  uni.navigateTo({
-    url: '/pages-sub/editTodo/editTodo?mode=add'
-  })
-}
-
-const openEditPage = (task: TodoItem) => {
-  uni.navigateTo({
-    url: `/pages-sub/editTodo/editTodo?mode=edit&id=${task.id}`
-  })
-}
 
 const fetchTodos = async () => {
   loading.value = true
@@ -140,6 +133,17 @@ const handleUpdateProgress = withAsyncLock(async () => {
 })
 // --- End Progress Modal ---
 
+const openAddPage = () => {
+  uni.navigateTo({
+    url: '/pages-sub/editTodo/editTodo?mode=add'
+  })
+}
+
+const openEditPage = (task: TodoItem) => {
+  uni.navigateTo({
+    url: `/pages-sub/editTodo/editTodo?mode=edit&id=${task.id}`
+  })
+}
 
 const goHome = () => {
   uni.navigateBack({
@@ -157,7 +161,7 @@ const goToPage = (pageName: string) => {
 }
 
 onShow(() => {
-  fetchTodos()
+  paging.value.reload();
 })
 </script>
 <template>
@@ -200,7 +204,7 @@ onShow(() => {
           </view>
           <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
             <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in urgentTasks" :key="task.id"
+              <view v-for="task in urgentTasks" :key="task.id + '-' + task.is_completed"
                 class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#991b1b]"
                 @longpress="openEditPage(task)" @click="handleToggle(task)">
                 <view class="flex items-center">
@@ -238,7 +242,7 @@ onShow(() => {
           </view>
           <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
             <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in habitTasks" :key="task.id"
+              <view v-for="task in habitTasks" :key="task.id + '-' + task.is_completed"
                 class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#166534] relative"
                 @longpress="openEditPage(task)" @click="handleToggle(task)">
                 <view class="flex items-center">
@@ -269,7 +273,7 @@ onShow(() => {
           </view>
           <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
             <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in todoTasks" :key="task.id"
+              <view v-for="task in todoTasks" :key="task.id + '-' + task.is_completed"
                 class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#075985]"
                 @longpress="openEditPage(task)" @click="handleToggle(task)">
                 <view class="flex items-center">
@@ -299,7 +303,7 @@ onShow(() => {
           </view>
           <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
             <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in progressTasks" :key="task.id"
+              <view v-for="task in progressTasks" :key="task.id + '-' + task.progress_percentage"
                 class="rounded-[16rpx] p-[16rpx] flex flex-col bg-white-50" @longpress="openEditPage(task)"
                 @click="openProgressModal(task)">
                 <view class="flex justify-between text-[20rpx] mb-[8rpx] text-[#6b21a8]">

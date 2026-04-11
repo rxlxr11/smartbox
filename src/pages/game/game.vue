@@ -24,24 +24,55 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import BackBar from "@/components/BackBar/BackBar.vue";
+import { getGames } from '@/api/game/game';
 
-const games = ref([
-  {
-    id: 'schulte-table',
-    name: '舒尔特方格',
-    icon: '🔢',
-    description: '经典舒尔特方格注意力训练',
-    path: '/pages-sub/game/SchulteTable/SchulteTable'
+type GameCard = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  path: string;
+};
+
+const gameRouteMap: Record<string, string> = {
+  'schulte-grid': '/pages-sub/game/SchulteTable/SchulteTable'
+};
+
+const gameIconMap: Record<string, string> = {
+  'schulte-grid': '🔢'
+};
+
+const games = ref<GameCard[]>([]);
+
+const loadGames = async () => {
+  try {
+    const list = await getGames(true);
+    games.value = list
+      .filter(item => Boolean(gameRouteMap[item.id]))
+      .map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description ?? '暂无描述',
+        icon: gameIconMap[item.id] ?? '🎮',
+        path: gameRouteMap[item.id]
+      }));
+  } catch (error) {
+    console.error('Failed to load game list:', error);
+    games.value = [];
   }
-]);
+};
 
 const goToGame = (path: string) => {
   uni.navigateTo({
     url: path
   });
 };
+
+onMounted(() => {
+  loadGames();
+});
 </script>
 
 <style scoped>

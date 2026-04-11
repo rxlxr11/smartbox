@@ -1,11 +1,39 @@
 import { supabase } from '@/lib/supabase'
-import type { TodoTable, TodoItem, CreateTodoDTO, UpdateTodoDTO, TaskRecord, CreateTaskRecordDTO } from '@/types/todo'
+import type { TodoTable, TodoItem, CreateTodoDTO, UpdateTodoDTO, TaskRecord } from '@/types/todo'
 import { REVERSE_TODO_TYPE_MAP } from '@/types/todo'
 
-const TABLE_NAME = 'tasks'
-const RECORDS_TABLE = 'task_records'
+/**
+ * 作用: 统一处理 rpc 的单行返回结果
+ * 入参: data(unknown, rpc 返回值)
+ * 返回: T，统一取单行结果；若 data 为数组则取第一项
+ */
+const getSingleRow = <T>(data: unknown): T => {
+  if (Array.isArray(data)) {
+    return (data[0] ?? null) as T
+  }
+  return data as T
+}
 
-// Helper to convert DB row to UI TodoItem
+/**
+ * 作用: 将 rpc 返回值安全转换为布尔值
+ * 入参: data(unknown, rpc 返回值)
+ * 返回: boolean，兼容布尔/单元素数组/对象首字段布尔值
+ */
+const getBooleanResult = (data: unknown): boolean => {
+  if (typeof data === 'boolean') return data
+  if (Array.isArray(data)) return getBooleanResult(data[0])
+  if (data && typeof data === 'object') {
+    const value = Object.values(data)[0]
+    if (typeof value === 'boolean') return value
+  }
+  return false
+}
+
+/**
+ * 作用: 把数据库任务行映射成前端 TodoItem
+ * 入参: row(TodoTable & { today_record?: TaskRecord[] })
+ * 返回: TodoItem，补充 category/progress_percentage 并映射 is_completed
+ */
 const mapToTodoItem = (row: TodoTable & { today_record?: TaskRecord[] }): TodoItem => {
   const category = REVERSE_TODO_TYPE_MAP[row.type ?? 2] || 'todo'
   
@@ -34,384 +62,231 @@ const mapToTodoItem = (row: TodoTable & { today_record?: TaskRecord[] }): TodoIt
 }
 
 export const todoApi = {
+  /**
+   * 作用: 获取首页任务列表（包含今日习惯打卡状态）
+   * 入参: 无
+   * 返回: Promise<TodoItem[]>，今日任务列表（习惯任务依赖 today_record）
+   */
   async getTodos() {
     const today = new Date().toISOString().split('T')[0]
-    
-    // We join with task_records to see if the habit was completed today
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .select(`
-        *,
-        today_record:task_records(id, record_date, is_success)
-      `)
-      .neq('is_deleted', true)
-      // 修改这里：不再强制要求关联到 task_records 才能查出主表数据
-      // 因为待办、紧急任务并没有每天预生成的记录
-      // 我们在前端处理：如果是习惯，且有今天预生成的记录，才会显示在前端的"今天习惯列表"里
-      .order('created_at', { ascending: false })
-      
-    if (error) throw error
-    
-    // 手动过滤掉今天不需要打卡的习惯
-    // 逻辑：如果是习惯类型，必须有今天的 record_date 关联记录（说明符合 repeat_pattern）才展示
-    const filteredData = (data as any[]).filter(row => {
-      const isHabit = row.type === 0 || row.type === 1;
-      if (isHabit) {
-        // 如果是习惯，检查今天是否有预生成的记录
-        const hasTodayRecord = row.today_record && row.today_record.some((r: any) => r.record_date === today);
-        return hasTodayRecord;
-      }
-      return true; // 非习惯类型直接展示
-    });
 
-    return filteredData.map(mapToTodoItem)
+    const { data, error } = await supabase.rpc('todo_get_todos', {
+      p_today: today,
+    })
+
+    if (error) throw error
+
+    return ((data as Array<TodoTable & { today_record?: TaskRecord[] }>) || []).map(mapToTodoItem)
   },
 
+  /**
+   * 作用: 按任务 ID 获取单条任务详情
+   * 入参: id(number, 任务ID)
+   * 返回: Promise<TodoItem>，单个任务详情
+   */
   async getTodoById(id: number) {
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .select('*')
-      .eq('id', id)
-      .neq('is_deleted', true)
-      .single()
-      
+    const { data, error } = await supabase.rpc('todo_get_todo_by_id', {
+      p_id: id,
+    })
+
     if (error) throw error
-    return mapToTodoItem(data as TodoTable)
+
+    return mapToTodoItem(getSingleRow<TodoTable>(data))
   },
 
+  /**
+   * 作用: 按任务类型查询任务列表
+   * 入参: type(number, 任务类型)
+   * 返回: Promise<TodoItem[]>，指定类型任务列表
+   */
   async getTodosByType(type: number) {
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .select('*')
-      .eq('type', type)
-      .neq('is_deleted', true)
-      .order('created_at', { ascending: false })
-      
+    const { data, error } = await supabase.rpc('todo_get_todos_by_type', {
+      p_type: type,
+    })
+
     if (error) throw error
-    return (data as TodoTable[]).map(mapToTodoItem)
+
+    return ((data as TodoTable[]) || []).map(mapToTodoItem)
   },
 
+  /**
+   * 作用: 按标签查询任务列表
+   * 入参: label(string, 标签)
+   * 返回: Promise<TodoItem[]>，指定标签任务列表
+   */
   async getTodosByLabel(label: string) {
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .select('*')
-      .eq('label', label)
-      .neq('is_deleted', true)
-      .order('created_at', { ascending: false })
-      
+    const { data, error } = await supabase.rpc('todo_get_todos_by_label', {
+      p_label: label,
+    })
+
     if (error) throw error
-    return (data as TodoTable[]).map(mapToTodoItem)
+
+    return ((data as TodoTable[]) || []).map(mapToTodoItem)
   },
 
+  /**
+   * 作用: 创建任务，并处理习惯任务当日初始化记录
+   * 入参: todo(CreateTodoDTO, 创建参数)
+   * 返回: Promise<TodoItem>，创建后的任务
+   */
   async addTodo(todo: CreateTodoDTO) {
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .insert([todo])
-      .select()
-      .single()
-      
+    const today = new Date().toISOString().split('T')[0]
+
+    const { data, error } = await supabase.rpc('todo_add', {
+      p_todo: todo,
+      p_today: today,
+    })
+
     if (error) throw error
-    
-    // 如果新增的是习惯，判断今天是否需要打卡，如果需要，立即插入初始记录
-    const task = data as TodoTable;
-    if (task.type === 0 || task.type === 1) {
-      const todayDate = new Date();
-      let todayDow = todayDate.getDay(); // 0-6, 0 is Sunday
-      if (todayDow === 0) todayDow = 7; // Map Sunday to 7 to match frontend
 
-      let shouldInsertToday = false;
-      const pattern = task.repeat_pattern;
-      
-      if (!pattern || (Array.isArray(pattern) && pattern.includes(0))) {
-        shouldInsertToday = true; // 每天
-      } else if (Array.isArray(pattern) && pattern.includes(todayDow)) {
-        shouldInsertToday = true; // 包含今天
-      }
-
-      if (shouldInsertToday) {
-        const todayStr = todayDate.toISOString().split('T')[0];
-        const initialSuccess = task.type === 0 ? true : false;
-        
-        await supabase.from(RECORDS_TABLE).insert([{
-          task_id: task.id,
-          record_date: todayStr,
-          is_success: initialSuccess
-        }]);
-      }
-    }
-    
-    return mapToTodoItem(data as TodoTable)
+    return mapToTodoItem(getSingleRow<TodoTable>(data))
   },
 
+  /**
+   * 作用: 更新指定任务的字段
+   * 入参: id(number, 任务ID), updates(UpdateTodoDTO, 更新字段)
+   * 返回: Promise<TodoItem>，更新后的任务
+   */
   async updateTodo(id: number, updates: UpdateTodoDTO) {
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-      
+    const { data, error } = await supabase.rpc('todo_update', {
+      p_id: id,
+      p_updates: updates,
+    })
+
     if (error) throw error
-    return mapToTodoItem(data as TodoTable)
+
+    return mapToTodoItem(getSingleRow<TodoTable>(data))
   },
 
+  /**
+   * 作用: 更新进度类任务当前进度，并同步当日进度记录
+   * 入参: id(number, 任务ID), progress(number, 最新进度)
+   * 返回: Promise<TodoItem>，更新进度后的任务
+   */
   async updateTodoProgress(id: number, progress: number) {
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .update({ current_value: progress })
-      .eq('id', id)
-      .select()
-      .single()
-      
+    const today = new Date().toISOString().split('T')[0]
+
+    const { data, error } = await supabase.rpc('todo_update_progress', {
+      p_id: id,
+      p_progress: progress,
+      p_today: today,
+    })
+
     if (error) throw error
 
-    // Record the progress update in task_records
-    const today = new Date().toISOString().split('T')[0]
-    await supabase.from(RECORDS_TABLE).upsert({
-      task_id: id,
-      record_date: today,
-      value: progress,
-      is_success: true,
-      note: 'Progress updated'
-    }, { onConflict: 'task_id, record_date' })
-
-    return mapToTodoItem(data as TodoTable)
+    return mapToTodoItem(getSingleRow<TodoTable>(data))
   },
 
+  /**
+   * 作用: 切换普通任务完成状态，并同步当日打卡记录
+   * 入参: id(number, 任务ID)
+   * 返回: Promise<TodoItem>，切换完成状态后的任务
+   */
   async toggleTodoComplete(id: number) {
-    const { data: current, error: fetchError } = await supabase
-      .from(TABLE_NAME)
-      .select('is_completed')
-      .eq('id', id)
-      .single()
-      
-    if (fetchError) throw fetchError
-    
-    const newCompleted = !current.is_completed
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .update({
-        is_completed: newCompleted,
-        completed_at: newCompleted ? new Date().toISOString() : null
-      })
-      .eq('id', id)
-      .select()
-      .single()
-      
+    const today = new Date().toISOString().split('T')[0]
+
+    const { data, error } = await supabase.rpc('todo_toggle_complete', {
+      p_id: id,
+      p_today: today,
+    })
+
     if (error) throw error
 
-    // Record the completion status in task_records
-    const today = new Date().toISOString().split('T')[0]
-    if (newCompleted) {
-      await supabase.from(RECORDS_TABLE).upsert({
-        task_id: id,
-        record_date: today,
-        is_success: true,
-        note: 'Task completed'
-      }, { onConflict: 'task_id, record_date' })
-    } else {
-      // If unmarked as completed, remove today's record if it exists
-      await supabase.from(RECORDS_TABLE)
-        .delete()
-        .eq('task_id', id)
-        .eq('record_date', today)
-    }
-
-    return mapToTodoItem(data as TodoTable)
+    return mapToTodoItem(getSingleRow<TodoTable>(data))
   },
   
+  /**
+   * 作用: 切换习惯任务当日打卡状态，并更新 streak_days
+   * 入参: id(number, 任务ID), isSuccess(boolean, 预留参数)
+   * 返回: Promise<boolean>，习惯当日记录切换后的 is_success 状态
+   */
   async toggleHabitRecord(id: number, isSuccess: boolean = true) {
     const today = new Date().toISOString().split('T')[0]
-    
-    // Check if record exists for today
-    const { data: existingRecord, error: fetchError } = await supabase
-      .from(RECORDS_TABLE)
-      .select('id, is_success')
-      .eq('task_id', id)
-      .eq('record_date', today)
-      .maybeSingle()
-      
-    if (fetchError && fetchError.code !== 'PGRST116') throw fetchError
-    
-    if (existingRecord) {
-      // Record exists (it should, due to cron job)
-      // Toggle the success state
-      const newStatus = !existingRecord.is_success;
-      
-      // Update streak days based on habit type BEFORE updating the record
-      const { data: currentTask, error: currentTaskError } = await supabase.from(TABLE_NAME).select('type, streak_days').eq('id', id).single()
-      if (currentTaskError) throw currentTaskError;
 
-      let newStreak = currentTask?.streak_days || 0;
-      
-      if (currentTask) {
-        if (currentTask.type === 1) {
-          // 正向习惯: true 增加，false 减少
-          if (newStatus) {
-            newStreak += 1;
-          } else if (newStreak > 0) {
-            newStreak -= 1;
-          }
-        } else if (currentTask.type === 0) {
-          // 反向习惯: false(破戒) 直接清零，true(恢复) 给1（因为它是当天有效的标志，实际天数靠cron累加）
-          if (!newStatus) {
-            newStreak = 0;
-          } else {
-             // 允许用户手滑点错后恢复，我们简单重置为1（或者不改，等第二天加，这里为了UI反馈先恢复为至少0）
-            // 真实情况如果需要完美回退历史天数比较复杂，通常这里只是简单的纠正
-          }
-        }
-        
-        const { error: updateStreakError } = await supabase.from(TABLE_NAME).update({ streak_days: newStreak }).eq('id', id)
-        if (updateStreakError) throw updateStreakError;
-      }
-
-      const { error: updateError } = await supabase
-        .from(RECORDS_TABLE)
-        .update({ 
-          is_success: newStatus, 
-          completed_at: newStatus ? new Date().toISOString() : null
-        })
-        .eq('id', existingRecord.id)
-        
-      if (updateError) {
-        console.error('Update record error:', updateError)
-        throw updateError
-      }
-      
-      return newStatus // Return the new status
-    } else {
-      // Fallback: If cron didn't run, create it manually
-      // Get the type of the habit to know what the default is_success should be
-      const { data: currentTask, error: currentTaskError } = await supabase.from(TABLE_NAME).select('type, streak_days').eq('id', id).single()
-      if (currentTaskError) throw currentTaskError;
-
-      const isNegativeHabit = currentTask.type === 0;
-
-      // 如果 cron 没有跑，我们这里其实是用户第一次点击
-      // 如果是反向习惯，点击代表破戒(is_success=false)
-      // 如果是正向习惯，点击代表打卡成功(is_success=true)
-      const initialSuccess = isNegativeHabit ? false : true;
-
-      const newRecord: CreateTaskRecordDTO = {
-        task_id: id,
-        record_date: today,
-        is_success: initialSuccess,
-      }
-      
-      const { error: insertError } = await supabase
-        .from(RECORDS_TABLE)
-        .insert([newRecord])
-        
-      if (insertError) {
-        console.error('Insert fallback record error:', insertError)
-        throw insertError
-      }
-      
-      // Update streak up
-      let newStreak = currentTask.streak_days || 0;
-      if (isNegativeHabit) {
-        newStreak = 0; // 反向习惯点击破戒，清零
-      } else {
-        newStreak += 1; // 正向习惯点击打卡，加一
-      }
-
-      const { error: updateStreakError } = await supabase.from(TABLE_NAME).update({ streak_days: newStreak }).eq('id', id)
-      if (updateStreakError) {
-        console.error('Update streak fallback error:', updateStreakError)
-        throw updateStreakError;
-      }
-      
-      return initialSuccess // Return the new status
-    }
-  },
-
-  async incrementHabitDays(id: number) {
-    const { data: current, error: fetchError } = await supabase
-      .from(TABLE_NAME)
-      .select('streak_days')
-      .eq('id', id)
-      .single()
-      
-    if (fetchError) throw fetchError
-    
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .update({ streak_days: (current.streak_days || 0) + 1 })
-      .eq('id', id)
-      .select()
-      .single()
-      
-    if (error) throw error
-    return mapToTodoItem(data as TodoTable)
-  },
-
-  async deleteTodo(id: number) {
-    const { error } = await supabase
-      .from(TABLE_NAME)
-      .update({ is_deleted: true })
-      .eq('id', id)
-      
-    if (error) throw error
-    return true
-  },
-
-  async getTaskRecordsByTaskId(taskId: number) {
-    const { data, error } = await supabase
-      .from(RECORDS_TABLE)
-      .select('*')
-      .eq('task_id', taskId)
-      .order('record_date', { ascending: true })
-      
-    if (error) throw error
-    return data as TaskRecord[]
-  },
-
-  async getHabitsWithRecords(startDate: string, endDate: string) {
-    const { data: habits, error: habitsError } = await supabase
-      .from(TABLE_NAME)
-      .select('id, title, type')
-      .in('type', [0, 1])
-      .neq('is_deleted', true)
-
-    if (habitsError) throw habitsError
-
-    const habitIds = habits.map((h: any) => h.id)
-    if (habitIds.length === 0) return []
-
-    const { data: records, error: recordsError } = await supabase
-      .from(RECORDS_TABLE)
-      .select('task_id, is_success')
-      .in('task_id', habitIds)
-      .gte('record_date', startDate)
-      .lte('record_date', endDate)
-      .eq('is_success', true)
-
-    if (recordsError) throw recordsError
-
-    return habits.map((habit: any) => {
-      const count = records.filter((r: any) => r.task_id === habit.id).length
-      return {
-        id: habit.id,
-        title: habit.title,
-        type: habit.type,
-        streak_days: count
-      }
+    const { data, error } = await supabase.rpc('todo_toggle_habit_record', {
+      p_id: id,
+      p_today: today,
+      p_is_success: isSuccess,
     })
-  },
-
-  async getRecentCompletedRecords(days: number) {
-    const d = new Date()
-    d.setDate(d.getDate() - days)
-    const startDate = d.toISOString()
-
-    const { data, error } = await supabase
-      .from(RECORDS_TABLE)
-      .select('created_at')
-      .eq('is_success', true)
-      .gte('created_at', startDate)
 
     if (error) throw error
-    return data as { created_at: string }[]
+
+    return getBooleanResult(data)
+  },
+
+  /**
+   * 作用: 手动增加习惯任务连续天数
+   * 入参: id(number, 任务ID)
+   * 返回: Promise<TodoItem>，连续天数 +1 后的任务
+   */
+  async incrementHabitDays(id: number) {
+    const { data, error } = await supabase.rpc('todo_increment_habit_days', {
+      p_id: id,
+    })
+
+    if (error) throw error
+
+    return mapToTodoItem(getSingleRow<TodoTable>(data))
+  },
+
+  /**
+   * 作用: 软删除任务（标记 is_deleted=true）
+   * 入参: id(number, 任务ID)
+   * 返回: Promise<boolean>，软删除是否成功
+   */
+  async deleteTodo(id: number) {
+    const { data, error } = await supabase.rpc('todo_delete', {
+      p_id: id,
+    })
+
+    if (error) throw error
+
+    return getBooleanResult(data)
+  },
+
+  /**
+   * 作用: 获取指定任务全部打卡记录（时间升序）
+   * 入参: taskId(number, 任务ID)
+   * 返回: Promise<TaskRecord[]>，该任务的全部记录
+   */
+  async getTaskRecordsByTaskId(taskId: number) {
+    const { data, error } = await supabase.rpc('todo_get_task_records_by_task_id', {
+      p_task_id: taskId,
+    })
+
+    if (error) throw error
+
+    return (data as TaskRecord[]) || []
+  },
+
+  /**
+   * 作用: 统计习惯任务在指定区间内的成功打卡次数
+   * 入参: startDate(string), endDate(string)
+   * 返回: Promise<Array<{ id; title; type; streak_days }>>，习惯区间统计
+   */
+  async getHabitsWithRecords(startDate: string, endDate: string) {
+    const { data, error } = await supabase.rpc('todo_get_habits_with_records', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+    })
+
+    if (error) throw error
+
+    return (data as Array<{ id: number; title: string; type: number; streak_days: number }>) || []
+  },
+
+  /**
+   * 作用: 获取最近 N 天的成功记录时间，用于图表统计
+   * 入参: days(number, 最近天数)
+   * 返回: Promise<Array<{ created_at: string }>>，最近完成记录时间列表
+   */
+  async getRecentCompletedRecords(days: number) {
+    const { data, error } = await supabase.rpc('todo_get_recent_completed_records', {
+      p_days: days,
+    })
+
+    if (error) throw error
+
+    return (data as { created_at: string }[]) || []
   }
 }

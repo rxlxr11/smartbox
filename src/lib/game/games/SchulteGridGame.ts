@@ -2,28 +2,18 @@ import { BaseGame } from '../BaseGame';
 import type { DifficultyConfig } from '@/types/game';
 import { recordGameScore, getPersonalHighScore } from '@/api/game/game';
 
+type SchulteGridConfig = {
+  id: string;
+  name: string;
+  maxErrors: number | null;
+  difficultyDict: Record<string, DifficultyConfig>;
+};
+
 export class SchulteGridGame extends BaseGame {
-  readonly id = 'schulte-grid';
-  readonly name = '舒尔特方格';
-  readonly maxErrors = null; // 不限制错误次数
-  
-  readonly difficultyDict: Record<string, DifficultyConfig> = {
-    easy: {
-      label: '简单 (3x3)',
-      value: 'easy',
-      params: { size: 3 }
-    },
-    normal: {
-      label: '普通 (4x4)',
-      value: 'normal',
-      params: { size: 4 }
-    },
-    hard: {
-      label: '困难 (5x5)',
-      value: 'hard',
-      params: { size: 5 }
-    }
-  };
+  readonly id: string;
+  readonly name: string;
+  readonly maxErrors: number | null;
+  readonly difficultyDict: Record<string, DifficultyConfig>;
 
   currentDifficulty = 'normal';
   
@@ -33,14 +23,15 @@ export class SchulteGridGame extends BaseGame {
   startTime: number = 0;
   endTime: number = 0;
 
-  constructor() {
+  constructor(config: SchulteGridConfig) {
     super();
-    // 初始化时尝试获取历史最高分
-    this.getHighScore().then(score => {
-      if (score) {
-        this.highScore = score;
-      }
-    });
+    this.id = config.id;
+    this.name = config.name;
+    this.maxErrors = config.maxErrors;
+    this.difficultyDict = config.difficultyDict;
+
+    const firstDifficulty = Object.keys(config.difficultyDict)[0];
+    this.currentDifficulty = firstDifficulty || 'normal';
   }
 
   onGameLogic(): void {
