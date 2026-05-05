@@ -97,6 +97,9 @@ importers:
       vue-i18n:
         specifier: ^9.1.9
         version: 9.14.5(vue@3.5.30(typescript@4.9.5))
+      wot-design-uni:
+        specifier: ^1.14.0
+        version: 1.14.0(vue@3.5.30(typescript@4.9.5))
     devDependencies:
       '@dcloudio/types':
         specifier: ^3.4.8
@@ -4057,6 +4060,12 @@ packages:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
     hasBin: true
+
+  wot-design-uni@1.14.0:
+    resolution: {integrity: sha512-FaBXtmxxAkZNZUxR2xeKBg/Agck+SPaFFFeCvbBzAFeqM/5m2Y/v/7te7rhMJpZFkMoAgtJR1yaWR0DnjOmTnA==}
+    engines: {HBuilderX: ^3.8.7}
+    peerDependencies:
+      vue: '>=3.2.47'
 
   wrap-ansi@7.0.0:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
@@ -9232,6 +9241,10 @@ snapshots:
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
+
+  wot-design-uni@1.14.0(vue@3.5.30(typescript@4.9.5)):
+    dependencies:
+      vue: 3.5.30(typescript@4.9.5)
 
   wrap-ansi@7.0.0:
     dependencies:

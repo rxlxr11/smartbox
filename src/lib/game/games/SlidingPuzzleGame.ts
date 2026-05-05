@@ -1,4 +1,4 @@
-import { BaseGame } from '../BaseGame';
+ import { BaseGame } from '../BaseGame';
 import type { DifficultyConfig } from '@/types/game';
 import { recordGameScore, getPersonalHighScore } from '@/api/game/game';
 

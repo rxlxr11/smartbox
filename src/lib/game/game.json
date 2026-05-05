@@ -6,7 +6,7 @@
     "icon": "🔢",
     "path": "/pages-sub/game/SchulteTable/SchulteTable",
     "is_active": true,
-    "max_errors": null,
+    "max_errors": 1,
     "difficulty_dict": {
       "easy": {
         "label": "简单 (3x3)",

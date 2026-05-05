@@ -1,35 +1,136 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import BackBar from '@/components/BackBar/BackBar.vue'
+import WdPopup from 'wot-design-uni/components/wd-popup/wd-popup.vue'
 import { API } from '@/api'
 import type { TodoItem } from '@/types/todo'
 import { onShow } from "@dcloudio/uni-app";
 import { withAsyncLock } from '@/utils/index'
 
+type TodoSectionKey = 'urgent' | 'habit' | 'negativeHabit' | 'todo' | 'progress'
+
+interface TodoSection {
+  key: TodoSectionKey
+  title: string
+  tag: string
+  count: number
+  summary: string
+  emptyText: string
+  tasks: TodoItem[]
+  style: {
+    accent: string
+    text: string
+    softBg: string
+    iconBg: string
+    shadow: string
+  }
+}
+
+const TODO_SECTION_STYLES: Record<TodoSectionKey, TodoSection['style']> = {
+  urgent: {
+    accent: '#ef4444',
+    text: '#991b1b',
+    softBg: '#fff1f2',
+    iconBg: '#fee2e2',
+    shadow: '0 12rpx 32rpx rgba(153, 27, 27, 0.08)'
+  },
+  habit: {
+    accent: '#22c55e',
+    text: '#166534',
+    softBg: '#f0fdf4',
+    iconBg: '#dcfce7',
+    shadow: '0 12rpx 32rpx rgba(22, 101, 52, 0.08)'
+  },
+  negativeHabit: {
+    accent: '#f97316',
+    text: '#9a3412',
+    softBg: '#fff7ed',
+    iconBg: '#ffedd5',
+    shadow: '0 12rpx 32rpx rgba(154, 52, 18, 0.08)'
+  },
+  todo: {
+    accent: '#0ea5e9',
+    text: '#075985',
+    softBg: '#f0f9ff',
+    iconBg: '#e0f2fe',
+    shadow: '0 12rpx 32rpx rgba(7, 89, 133, 0.08)'
+  },
+  progress: {
+    accent: '#9333ea',
+    text: '#6b21a8',
+    softBg: '#faf5ff',
+    iconBg: '#f3e8ff',
+    shadow: '0 12rpx 32rpx rgba(107, 33, 168, 0.08)'
+  }
+}
+
 const todos = ref<TodoItem[]>([])
 const loading = ref(false)
 const paging = ref<any>(null)
+const activeSectionKey = ref<TodoSectionKey | null>('urgent')
 
 const urgentTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'urgent')))
 const pHabitTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'positive_habit')))
 const nHabitTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'negative_habit')))
-
-const isPositiveHabit = ref(true)
-const habitTasks = computed(() => isPositiveHabit.value ? pHabitTasks.value : nHabitTasks.value)
-
-
 const todoTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'todo')))
 const progressTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'progress')))
+const todoSections = computed<TodoSection[]>(() => [
+  {
+    key: 'urgent',
+    title: '紧急事务',
+    tag: getPendingTag(urgentTasks.value),
+    count: getPendingCount(urgentTasks.value),
+    summary: getCommonSummary(urgentTasks.value, '暂无紧急事务'),
+    emptyText: '暂无事项',
+    tasks: urgentTasks.value,
+    style: TODO_SECTION_STYLES.urgent
+  },
+  {
+    key: 'habit',
+    title: '日常习惯',
+    tag: getPendingTag(pHabitTasks.value),
+    count: getPendingCount(pHabitTasks.value),
+    summary: getHabitSummary(pHabitTasks.value, '暂无日常习惯'),
+    emptyText: '暂无习惯',
+    tasks: pHabitTasks.value,
+    style: TODO_SECTION_STYLES.habit
+  },
+  {
+    key: 'negativeHabit',
+    title: '反向习惯',
+    tag: getPendingTag(nHabitTasks.value),
+    count: getPendingCount(nHabitTasks.value),
+    summary: getHabitSummary(nHabitTasks.value, '暂无反向习惯'),
+    emptyText: '暂无反向习惯',
+    tasks: nHabitTasks.value,
+    style: TODO_SECTION_STYLES.negativeHabit
+  },
+  {
+    key: 'todo',
+    title: '待办事项',
+    tag: getPendingTag(todoTasks.value),
+    count: getPendingCount(todoTasks.value),
+    summary: getCommonSummary(todoTasks.value, '暂无待办事项'),
+    emptyText: '暂无待办',
+    tasks: todoTasks.value,
+    style: TODO_SECTION_STYLES.todo
+  },
+  {
+    key: 'progress',
+    title: '长期进度',
+    tag: getProgressTag(),
+    count: getPendingCount(progressTasks.value),
+    summary: getProgressSummary(),
+    emptyText: '暂无进度',
+    tasks: progressTasks.value,
+    style: TODO_SECTION_STYLES.progress
+  }
+])
+
+const isSectionExpanded = (key: TodoSectionKey) => activeSectionKey.value === key
 
 const sortTasks = (tasks: TodoItem[]) => {
   return [...tasks].sort((a, b) => {
-    const isCompleted = (t: TodoItem) => {
-      if (t.category === 'progress') {
-        return t.progress_percentage !== undefined && t.progress_percentage >= 100;
-      }
-      return !!t.is_completed;
-    };
-
     const aCompleted = isCompleted(a);
     const bCompleted = isCompleted(b);
 
@@ -43,8 +144,51 @@ const sortTasks = (tasks: TodoItem[]) => {
   });
 }
 
-const toggleHabitType = () => {
-  isPositiveHabit.value = !isPositiveHabit.value
+const isCompleted = (task: TodoItem) => {
+  if (task.category === 'progress') {
+    return task.progress_percentage !== undefined && task.progress_percentage >= 100;
+  }
+  return !!task.is_completed;
+}
+
+const getPendingCount = (tasks: TodoItem[]) => {
+  return tasks.filter(task => !isCompleted(task)).length
+}
+
+const getPendingTag = (tasks: TodoItem[]) => {
+  const count = getPendingCount(tasks)
+  return count > 0 ? `${count} 项未完成` : '已清空'
+}
+
+const getFirstPendingTask = (tasks: TodoItem[]) => {
+  return tasks.find(task => !isCompleted(task))
+}
+
+const getCommonSummary = (tasks: TodoItem[], emptyText: string) => {
+  const firstPending = getFirstPendingTask(tasks)
+  if (firstPending) return `最近：${firstPending.title}`
+  return tasks.length > 0 ? '已全部完成' : emptyText
+}
+
+const getHabitSummary = (tasks: TodoItem[], emptyText: string) => {
+  const firstPending = getFirstPendingTask(tasks)
+  if (firstPending) return `待打卡：${firstPending.title}`
+  return tasks.length > 0 ? '今日已完成' : emptyText
+}
+
+const getProgressTag = () => {
+  const count = getPendingCount(progressTasks.value)
+  return count > 0 ? `${count} 项进行中` : '已达成'
+}
+
+const getProgressSummary = () => {
+  const firstPending = getFirstPendingTask(progressTasks.value)
+  if (!firstPending) return progressTasks.value.length > 0 ? '全部目标已达成' : '暂无长期进度'
+  return `${firstPending.title} · ${firstPending.progress_percentage || 0}%`
+}
+
+const toggleSection = (key: TodoSectionKey) => {
+  activeSectionKey.value = activeSectionKey.value === key ? null : key
 }
 
 const formatDate = (dateStr?: string) => {
@@ -60,15 +204,12 @@ const formatDate = (dateStr?: string) => {
 
 
 const fetchTodos = async () => {
-  loading.value = true
   try {
     const data = await API.todo.getTodos()
     todos.value = data
   } catch (e) {
     console.error('Failed to fetch todos:', e)
     uni.showToast({ title: '加载失败', icon: 'none' })
-  } finally {
-    loading.value = false
   }
 }
 
@@ -90,19 +231,24 @@ const handleToggle = withAsyncLock(async (task: TodoItem) => {
   }
 })
 
-// --- Progress Modal ---
-const showProgressModal = ref(false)
+// --- Progress Popup ---
+const progressPopupVisible = ref(false)
 const progressModalTask = ref<TodoItem | null>(null)
 const progressInput = ref(0)
 
 const openProgressModal = (task: TodoItem) => {
   progressModalTask.value = task
   progressInput.value = task.current_value || 0
-  showProgressModal.value = true
+  progressPopupVisible.value = true
 }
 
 const closeProgressModal = () => {
-  showProgressModal.value = false
+  progressPopupVisible.value = false
+  progressModalTask.value = null
+}
+
+const handleProgressPopupClose = () => {
+  progressPopupVisible.value = false
   progressModalTask.value = null
 }
 
@@ -131,7 +277,7 @@ const handleUpdateProgress = withAsyncLock(async () => {
     uni.showToast({ title: '更新失败', icon: 'none' })
   }
 })
-// --- End Progress Modal ---
+// --- End Progress Popup ---
 
 const openAddPage = () => {
   uni.navigateTo({
@@ -165,9 +311,13 @@ onShow(() => {
 })
 </script>
 <template>
-  <z-paging ref="paging" bg-color="#f6f6f6" v-model="todos" @query="fetchTodos" :use-page-scroll="false"
-    :loading-more-enabled="false" :show-scrollbar="false">
-
+  <z-paging ref="paging" bg-color="#f6f6f6" v-model="todos"
+            @query="fetchTodos"
+            :use-page-scroll="false"
+            :loading-more-enabled="false"
+            :show-scrollbar="false"
+            :auto-show-system-loading="true"
+  >
     <template #top>
       <BackBar bgColor="#ffffff" :custom-left="true">
         <template #left>
@@ -181,169 +331,120 @@ onShow(() => {
             @click="openAddPage">新增</view>
         </template>
       </BackBar>
-      <!-- Top Navigation -->
-      <view class="flex flex-row justify-around bg-white px-[32rpx] border-b-[2rpx] border-b-solid border-[#e2e8f0]">
-        <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#2b6cee] font-600 ">
-          打卡</view>
-        <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="goToPage('todoCharts')">
-          数据
-        </view>
-        <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="openAddPage">
-          编辑</view>
-      </view>
     </template>
 
-    <!-- Main Content Grid -->
+
+    <!-- Top Navigation -->
+    <view class="flex flex-row justify-around bg-white px-[32rpx] border-b-[2rpx] border-b-solid border-[#e2e8f0]">
+      <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#2b6cee] font-600 ">
+        打卡</view>
+      <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="goToPage('todoCharts')">
+        数据
+      </view>
+      <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="openAddPage">
+        编辑</view>
+    </view>
+
+    <!-- 待办分组：收起显示摘要，展开显示可操作任务列表 -->
     <view class="flex-1 flex flex-col h-full">
-      <view class="flex flex-col gap-[24rpx] p-[32rpx] box-border">
-        <!-- 紧急事务 (Urgent Tasks) -->
-        <view
-          class="rounded-[24rpx] p-[32rpx] flex flex-col shadow-[0_2rpx_4rpx_rgba(0,0,0,0.05)] h-[360rpx] box-border bg-[#fee2e2] overflow-hidden">
-          <view class="flex justify-between items-start mb-[16rpx] shrink-0">
-            <text class="text-[32rpx] font-700 text-[#991b1b]">紧急事务</text>
-          </view>
-          <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
-            <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in urgentTasks" :key="task.id + '-' + task.is_completed"
-                class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#991b1b]"
-                @longpress="openEditPage(task)" @click="handleToggle(task)">
-                <view class="flex items-center">
-                  <view
-                    class="w-[32rpx] h-[32rpx] border-[2rpx] border-solid border-[#991b1b] rounded-[6rpx] flex items-center justify-center shrink-0">
-                    <view v-if="task.is_completed" class="i-fa6-solid:check text-[20rpx] text-[#991b1b]"></view>
-                  </view>
-                  <text class="ml-[10rpx] flex-1 overflow-hidden whitespace-nowrap text-ellipsis"
-                    :class="{ 'line-through opacity-70': task.is_completed }">{{ task.title }}</text>
-                </view>
-                <view class="mt-[8rpx] text-[20rpx] opacity-80" v-if="task.deadline">
-                  {{ formatDate(task.deadline) }}
-                </view>
-              </view>
-              <view v-if="urgentTasks.length === 0"
-                class="text-[24rpx] opacity-60 text-center mt-[40rpx] text-[#991b1b]">
-                暂无事项
-              </view>
+      <view class="flex flex-col gap-[20rpx] p-[32rpx] box-border">
+        <view v-for="section in todoSections" :key="section.key"
+          class="rounded-[28rpx] bg-white overflow-hidden border-[2rpx] border-solid border-[#eef2f7]"
+          :style="{ boxShadow: section.style.shadow }">
+          <view class="flex items-center min-h-[128rpx] p-[28rpx] box-border" @click="toggleSection(section.key)">
+            <view class="w-[8rpx] h-[72rpx] rounded-[999rpx] shrink-0"
+              :style="{ backgroundColor: section.style.accent }"></view>
+            <view class="w-[64rpx] h-[64rpx] rounded-[20rpx] flex items-center justify-center ml-[20rpx] shrink-0"
+              :style="{ backgroundColor: section.style.iconBg, color: section.style.text }">
+              <text class="text-[26rpx] font-700">{{ section.title.slice(0, 1) }}</text>
             </view>
-          </scroll-view>
-        </view>
+            <view class="flex-1 min-w-0 ml-[20rpx]">
+              <view class="flex items-center">
+                <text class="text-[30rpx] font-700 text-[#0f172a]">{{ section.title }}</text>
+                <text class="ml-[12rpx] text-[20rpx] py-[4rpx] px-[12rpx] rounded-[999rpx]"
+                  :style="{ backgroundColor: section.style.softBg, color: section.style.text }">{{ section.tag }}</text>
+              </view>
+              <text class="block mt-[10rpx] text-[24rpx] text-[#64748b] overflow-hidden whitespace-nowrap text-ellipsis">
+                {{ section.summary }}
+              </text>
+            </view>
+            <view class="flex flex-col items-end ml-[20rpx] shrink-0">
+              <text class="text-[34rpx] font-800" :style="{ color: section.style.text }">{{ section.count }}</text>
+              <view class="w-[32rpx] h-[32rpx] flex items-center justify-center mt-[4rpx]"
+                :class="isSectionExpanded(section.key) ? 'i-fa6-solid:chevron-up' : 'i-fa6-solid:chevron-down'"
+                :style="{ color: section.style.text }"></view>
+            </view>
+          </view>
 
-        <!-- 日常习惯 (Daily Habits) -->
-        <view
-          class="rounded-[24rpx] p-[32rpx] flex flex-col shadow-[0_2rpx_4rpx_rgba(0,0,0,0.05)] h-[360rpx] box-border bg-[#dcfce7] overflow-hidden">
-          <view class="flex justify-between items-start mb-[16rpx] shrink-0">
-            <text class="text-[32rpx] font-700 text-[#166534]">日常习惯</text>
-            <view class="flex items-center gap-[8rpx]">
-              <view
-                class="text-[20rpx] py-[4rpx] px-[12rpx] rounded-[8rpx] font-500 text-[#166534] bg-[rgba(255,255,255,0.5)]"
-                @click="toggleHabitType">
-                <text class="text-[32rpx] leading-1">{{ isPositiveHabit ? '😊' : '😈' }}</text>
-              </view>
-            </view>
-          </view>
-          <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
-            <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in habitTasks" :key="task.id + '-' + task.is_completed"
-                class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#166534] relative"
-                @longpress="openEditPage(task)" @click="handleToggle(task)">
-                <view class="flex items-center">
-                  <view
-                    class="w-[32rpx] h-[32rpx] border-[2rpx] border-solid border-[#166534] rounded-[6rpx] flex items-center justify-center shrink-0">
-                    <view v-if="task.is_completed" class="i-fa6-solid:check text-[20rpx] text-[#166534]"></view>
-                  </view>
-                  <text class="ml-[10rpx] flex-1 overflow-hidden whitespace-nowrap text-ellipsis"
-                    :class="{ 'line-through opacity-70': task.is_completed }">{{ task.title }}</text>
-                </view>
-                <view class="text-[20rpx] opacity-80 text-right mt-[8rpx]">
-                  坚持 {{ task.streak_days || 0 }} 天
-                </view>
-              </view>
-              <view v-if="habitTasks.length === 0"
-                class="text-[24rpx] opacity-60 text-center mt-[40rpx] text-[#166534]">
-                暂无习惯
-              </view>
-            </view>
-          </scroll-view>
-        </view>
+          <!-- 展开区域：当前分组展示完整任务操作，其他分组只保留摘要入口 -->
+          <view v-if="isSectionExpanded(section.key)"
+            class="px-[28rpx] pb-[28rpx] border-t-[2rpx] border-t-solid border-[#eef2f7]">
+            <view class="h-[20rpx]"></view>
 
-        <!-- 待办事项 (To-do List) -->
-        <view
-          class="rounded-[24rpx] p-[32rpx] flex flex-col shadow-[0_2rpx_4rpx_rgba(0,0,0,0.05)] h-[360rpx] box-border bg-[#e0f2fe] overflow-hidden">
-          <view class="flex justify-between items-start mb-[16rpx] shrink-0">
-            <text class="text-[32rpx] font-700 text-[#075985]">待办事项</text>
-          </view>
-          <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
             <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in todoTasks" :key="task.id + '-' + task.is_completed"
-                class="rounded-[16rpx] p-[16rpx] text-[24rpx] flex flex-col bg-white-50 text-[#075985]"
-                @longpress="openEditPage(task)" @click="handleToggle(task)">
-                <view class="flex items-center">
-                  <view
-                    class="w-[32rpx] h-[32rpx] border-[2rpx] border-solid border-[#075985] rounded-[6rpx] flex items-center justify-center shrink-0">
-                    <view v-if="task.is_completed" class="i-fa6-solid:check text-[20rpx] text-[#075985]"></view>
+              <view v-for="task in section.tasks" :key="task.id + '-' + section.key + '-' + task.is_completed + '-' + task.progress_percentage"
+                class="rounded-[18rpx] p-[18rpx] text-[24rpx] flex flex-col"
+                :style="{ backgroundColor: section.style.softBg, color: section.style.text }"
+                @longpress="openEditPage(task)"
+                @click="section.key === 'progress' ? openProgressModal(task) : handleToggle(task)">
+                <template v-if="section.key === 'progress'">
+                  <view class="flex justify-between text-[22rpx] mb-[10rpx]">
+                    <text class="flex-1 overflow-hidden whitespace-nowrap text-ellipsis mr-[10rpx]"
+                      :class="{ 'line-through opacity-70': task.progress_percentage !== undefined && task.progress_percentage >= 100 }">
+                      {{ task.title }}
+                    </text>
+                    <text class="shrink-0"
+                      :class="{ 'line-through opacity-70': task.progress_percentage !== undefined && task.progress_percentage >= 100 }">
+                      {{ task.current_value || 0 }}/{{ task.target_value || 0 }}{{ task.unit }}
+                    </text>
                   </view>
-                  <text class="ml-[10rpx] flex-1 overflow-hidden whitespace-nowrap text-ellipsis"
-                    :class="{ 'line-through opacity-70': task.is_completed }">{{ task.title }}</text>
-                </view>
-                <view class="mt-[8rpx] text-[20rpx] opacity-80" v-if="task.deadline">
-                  {{ formatDate(task.deadline) }}
-                </view>
+                  <view class="flex items-center">
+                    <view class="w-full h-[12rpx] rounded-[999rpx] overflow-hidden bg-[rgba(255,255,255,0.7)]">
+                      <view class="h-full rounded-[999rpx]"
+                        :style="{ width: (task.progress_percentage || 0) + '%', backgroundColor: section.style.accent }"></view>
+                    </view>
+                    <text class="ml-[12rpx] text-[20rpx] shrink-0">{{ task.progress_percentage || 0 }}%</text>
+                  </view>
+                </template>
+                <template v-else>
+                  <view class="flex items-center">
+                    <view
+                      class="w-[34rpx] h-[34rpx] border-[2rpx] border-solid rounded-[8rpx] flex items-center justify-center shrink-0"
+                      :style="{ borderColor: section.style.text }">
+                      <view v-if="task.is_completed" class="i-fa6-solid:check text-[20rpx]"
+                        :style="{ color: section.style.text }"></view>
+                    </view>
+                    <text class="ml-[12rpx] flex-1 overflow-hidden whitespace-nowrap text-ellipsis"
+                      :class="{ 'line-through opacity-70': task.is_completed }">{{ task.title }}</text>
+                  </view>
+                  <view v-if="section.key === 'habit' || section.key === 'negativeHabit'"
+                    class="text-[20rpx] opacity-80 text-right mt-[8rpx]">
+                    坚持 {{ task.streak_days || 0 }} 天
+                  </view>
+                  <view class="mt-[8rpx] text-[20rpx] opacity-80" v-else-if="task.deadline">
+                    {{ formatDate(task.deadline) }}
+                  </view>
+                </template>
               </view>
-              <view v-if="todoTasks.length === 0" class="text-[24rpx] opacity-60 text-center mt-[40rpx] text-[#075985]">
-                暂无待办
-              </view>
-            </view>
-          </scroll-view>
-        </view>
 
-        <!-- 长期进度 (Long-term Progress) -->
-        <view
-          class="rounded-[24rpx] p-[32rpx] flex flex-col shadow-[0_2rpx_4rpx_rgba(0,0,0,0.05)] h-[360rpx] box-border bg-[#f3e8ff] overflow-hidden">
-          <view class="flex justify-between items-start mb-[16rpx] shrink-0">
-            <text class="text-[32rpx] font-700 text-[#6b21a8]">长期进度</text>
-          </view>
-          <scroll-view scroll-y class="flex-1 overflow-y-auto h-0">
-            <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in progressTasks" :key="task.id + '-' + task.progress_percentage"
-                class="rounded-[16rpx] p-[16rpx] flex flex-col bg-white-50" @longpress="openEditPage(task)"
-                @click="openProgressModal(task)">
-                <view class="flex justify-between text-[20rpx] mb-[8rpx] text-[#6b21a8]">
-                  <text class="flex-1 overflow-hidden whitespace-nowrap text-ellipsis mr-[10rpx]"
-                    :class="{ 'line-through opacity-70': task.progress_percentage !== undefined && task.progress_percentage >= 100 }">{{
-                      task.title
-                    }}</text>
-                  <text class="shrink-0"
-                    :class="{ 'line-through opacity-70': task.progress_percentage !== undefined && task.progress_percentage >= 100 }">{{
-                      task.current_value || 0 }}/{{ task.target_value || 0 }}{{ task.unit
-                    }}</text>
-                </view>
-                <view class="flex items-center">
-                  <view class="w-full h-[12rpx] rounded-[999rpx] overflow-hidden bg-[rgba(255,255,255,0.5)]">
-                    <view class="h-full rounded-[999rpx] bg-[#6b21a8]"
-                      :style="{ width: (task.progress_percentage || 0) + '%' }"></view>
-                  </view>
-                  <text class="text-[#6b21a8] ml-2 text-[20rpx] shrink-0">{{ task.progress_percentage || 0 }}%</text>
-                </view>
-              </view>
-              <view v-if="progressTasks.length === 0"
-                class="text-[24rpx] opacity-60 text-center mt-[40rpx] text-[#6b21a8]">
-                暂无进度
+              <!-- 空状态：展开分组没有任务时提示当前分类暂无内容 -->
+              <view v-if="section.tasks.length === 0" class="text-[24rpx] opacity-60 text-center py-[48rpx]"
+                :style="{ color: section.style.text }">
+                {{ section.emptyText }}
               </view>
             </view>
-          </scroll-view>
+          </view>
         </view>
       </view>
     </view>
 
-    <!-- Progress Update Modal -->
-    <view v-if="showProgressModal"
-      class="fixed top-0 left-0 right-0 bottom-0 bg-[rgba(16,22,34,0.4)] z-[999] flex items-center justify-center p-[32rpx]"
-      style="backdrop-filter: blur(4px);" @click="closeProgressModal">
-      <view
-        class="bg-[#ffffff] w-[680rpx] max-w-[900rpx] rounded-[24rpx] shadow-[0_20rpx_50rpx_rgba(0,0,0,0.15)] flex flex-col max-h-[90vh] overflow-hidden box-border max-w-[600rpx]"
-        @click.stop>
-        <view
-          class="py-[32rpx] px-[40rpx] border-b-[2rpx] border-b-solid border-[#c4c6cf] flex justify-between items-center">
+    <!-- 进度更新弹窗：使用 Wot UI Popup 从底部弹出 -->
+    <wd-popup v-model="progressPopupVisible" position="bottom" :z-index="999" :safe-area-inset-bottom="true"
+      custom-style="border-radius: 32rpx 32rpx 0 0; overflow: hidden;" @close="handleProgressPopupClose">
+      <view class="bg-[#ffffff] w-full max-h-[80vh] flex flex-col overflow-hidden box-border">
+        <view class="py-[32rpx] px-[40rpx] border-b-[2rpx] border-b-solid border-[#e2e8f0] flex justify-between items-center">
           <text class="text-[36rpx] font-700 text-[#101622]">更新进度</text>
+          <view class="w-[48rpx] h-[48rpx] i-fa6-solid:xmark text-[#64748b]" @click="closeProgressModal"></view>
         </view>
         <view class="flex-1 p-[40rpx] overflow-y-auto overflow-x-hidden">
           <view v-if="progressModalTask" class="flex flex-col gap-[32rpx] pb-[40rpx] w-full box-border overflow-hidden">
@@ -352,18 +453,18 @@ onShow(() => {
             </view>
             <view class="flex flex-col gap-[16rpx] w-full box-border overflow-hidden">
               <text class="text-[28rpx] font-600 text-[#44474e]">目标总量</text>
-              <view class="flex items-center w-[500rpx]">
+              <view class="flex items-center w-full">
                 <view
-                  class="w-[600rpx] box-content py-[24rpx] px-[32rpx] rounded-[16rpx] border-[2rpx] border-solid border-[#c4c6cf] text-[26rpx] text-[#101622] bg-[#f1f1f4] text-[#44474e]">
+                  class="w-full box-border py-[24rpx] px-[32rpx] rounded-[16rpx] border-[2rpx] border-solid border-[#c4c6cf] text-[26rpx] bg-[#f1f1f4] text-[#44474e]">
                   <text>{{ progressModalTask.target_value || 0 }} {{ progressModalTask.unit }}</text>
                 </view>
               </view>
             </view>
             <view class="flex flex-col gap-[16rpx] w-full box-border overflow-hidden">
               <text class="text-[28rpx] font-600 text-[#44474e]">当前进度 <text class="text-[#ba1a1a]">*</text></text>
-              <view class="flex items-center w-[500rpx]">
+              <view class="flex items-center w-full">
                 <input
-                  class="w-[600rpx] box-content py-[24rpx] px-[32rpx] rounded-[16rpx] border-[2rpx] border-solid border-[#c4c6cf] bg-[#fcfcfd] text-[26rpx] text-[#101622]"
+                  class="w-full box-border py-[24rpx] px-[32rpx] rounded-[16rpx] border-[2rpx] border-solid border-[#c4c6cf] bg-[#fcfcfd] text-[26rpx] text-[#101622]"
                   v-model.number="progressInput" type="number"
                   :placeholder="String(progressModalTask.current_value || 0)" />
               </view>
@@ -374,8 +475,7 @@ onShow(() => {
             </view>
           </view>
         </view>
-        <view
-          class="flex justify-end gap-[24rpx] p-[32rpx] border-t-[2rpx] border-t-solid border-[#c4c6cf] bg-[#fcfcfd]">
+        <view class="flex justify-end gap-[24rpx] p-[32rpx] border-t-[2rpx] border-t-solid border-[#e2e8f0] bg-[#fcfcfd]">
           <view
             class="py-[20rpx] px-[48rpx] rounded-[999rpx] text-[28rpx] font-600 flex items-center justify-center transition-all duration-200 text-[#44474e] bg-transparent border-[2rpx] border-solid border-[#74777f]"
             @click="closeProgressModal">取消</view>
@@ -384,7 +484,7 @@ onShow(() => {
             @click="handleUpdateProgress">更新</view>
         </view>
       </view>
-    </view>
+    </wd-popup>
 
   </z-paging>
 

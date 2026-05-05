@@ -127,9 +127,7 @@ const getNumberColor = (num: number) => {
 
 const handleCellClick = (num: number) => {
   if (!game.value || game.value.status !== 'playing') return;
-  
-  if (num < game.value.expectedNumber) return;
-  
+
   const isCorrect = game.value.clickCell(num);
   if (!isCorrect) {
     // 错误动画提示

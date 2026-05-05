@@ -38,6 +38,7 @@ export class SchulteGridGame extends BaseGame {
     this.expectedNumber = 1;
     this.generateGrid();
     this.startTime = Date.now();
+    this.endTime = 0;
   }
 
   private generateGrid(): void {
@@ -70,6 +71,9 @@ export class SchulteGridGame extends BaseGame {
       return true;
     } else {
       this.recordError();
+      if (this.status === 'ended' && this.endTime === 0) {
+        this.endTime = Date.now();
+      }
       return false;
     }
   }

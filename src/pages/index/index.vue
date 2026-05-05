@@ -27,6 +27,7 @@ const naviTo = (url: string) => {
     <!-- Main Content -->
     <view class="flex flex-col px-[32rpx] py-[48rpx] w-full box-border">
       <!-- Modules List -->
+      <!-- 目前写死，之后可以通过配置文件加载 -->
       <view class="flex flex-col w-full">
         <!-- Game -->
         <view

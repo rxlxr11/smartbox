@@ -64,7 +64,8 @@
     "tslib": "^2.8.1",
     "url-search-params-polyfill": "^8.2.5",
     "vue": "^3.4.21",
-    "vue-i18n": "^9.1.9"
+    "vue-i18n": "^9.1.9",
+    "wot-design-uni": "^1.14.0"
   },
   "devDependencies": {
     "@dcloudio/types": "^3.4.8",
