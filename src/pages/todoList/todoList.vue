@@ -316,7 +316,6 @@ onShow(() => {
             :use-page-scroll="false"
             :loading-more-enabled="false"
             :show-scrollbar="false"
-            :auto-show-system-loading="true"
   >
     <template #top>
       <BackBar bgColor="#ffffff" :custom-left="true">
