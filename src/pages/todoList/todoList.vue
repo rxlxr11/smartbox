@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import BackBar from '@/components/BackBar/BackBar.vue'
-import WdPopup from 'wot-design-uni/components/wd-popup/wd-popup.vue'
 import { API } from '@/api'
 import type { TodoItem } from '@/types/todo'
-import { onShow } from "@dcloudio/uni-app";
 import { withAsyncLock } from '@/utils/index'
+import TodoChartsPanel from './components/TodoChartsPanel.vue'
+import TodoCheckinPanel from './components/TodoCheckinPanel.vue'
+import TodoEditPanel from './components/TodoEditPanel.vue'
 
 type TodoSectionKey = 'urgent' | 'habit' | 'negativeHabit' | 'todo' | 'progress'
+type TodoTabKey = 'checkin' | 'charts' | 'edit'
+
+interface TodoTab {
+  name: TodoTabKey
+  title: string
+}
 
 interface TodoSection {
   key: TodoSectionKey
@@ -65,9 +73,19 @@ const TODO_SECTION_STYLES: Record<TodoSectionKey, TodoSection['style']> = {
 }
 
 const todos = ref<TodoItem[]>([])
-const loading = ref(false)
 const paging = ref<any>(null)
+const activeTab = ref<TodoTabKey>('checkin')
 const activeSectionKey = ref<TodoSectionKey | null>('urgent')
+
+const progressPopupVisible = ref(false)
+const progressModalTask = ref<TodoItem | null>(null)
+const progressInput = ref(0)
+
+const todoTabs: TodoTab[] = [
+  { name: 'checkin', title: '打卡' },
+  { name: 'charts', title: '数据' },
+  { name: 'edit', title: '编辑' }
+]
 
 const urgentTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'urgent')))
 const pHabitTasks = computed(() => sortTasks(todos.value.filter(t => t.category === 'positive_habit')))
@@ -127,92 +145,132 @@ const todoSections = computed<TodoSection[]>(() => [
   }
 ])
 
-const isSectionExpanded = (key: TodoSectionKey) => activeSectionKey.value === key
-
-const sortTasks = (tasks: TodoItem[]) => {
+/**
+ * 按完成状态和创建时间排序任务。
+ * @param {TodoItem[]} tasks 任务列表
+ * @returns {TodoItem[]} 排序后的任务列表
+ */
+function sortTasks(tasks: TodoItem[]) {
   return [...tasks].sort((a, b) => {
-    const aCompleted = isCompleted(a);
-    const bCompleted = isCompleted(b);
+    const aCompleted = isCompleted(a)
+    const bCompleted = isCompleted(b)
 
     if (aCompleted !== bCompleted) {
-      return aCompleted ? 1 : -1;
+      return aCompleted ? 1 : -1
     }
 
-    const timeA = new Date(a.created_at || 0).getTime();
-    const timeB = new Date(b.created_at || 0).getTime();
-    return timeB - timeA;
-  });
+    const timeA = new Date(a.created_at || 0).getTime()
+    const timeB = new Date(b.created_at || 0).getTime()
+    return timeB - timeA
+  })
 }
 
-const isCompleted = (task: TodoItem) => {
+/**
+ * 判断任务是否已完成。
+ * @param {TodoItem} task 任务项
+ * @returns {boolean} 是否完成
+ */
+function isCompleted(task: TodoItem) {
   if (task.category === 'progress') {
-    return task.progress_percentage !== undefined && task.progress_percentage >= 100;
+    return task.progress_percentage !== undefined && task.progress_percentage >= 100
   }
-  return !!task.is_completed;
+  return !!task.is_completed
 }
 
-const getPendingCount = (tasks: TodoItem[]) => {
+/**
+ * 获取未完成任务数量。
+ * @param {TodoItem[]} tasks 任务列表
+ * @returns {number} 未完成数量
+ */
+function getPendingCount(tasks: TodoItem[]) {
   return tasks.filter(task => !isCompleted(task)).length
 }
 
-const getPendingTag = (tasks: TodoItem[]) => {
+/**
+ * 获取普通任务分组标签。
+ * @param {TodoItem[]} tasks 任务列表
+ * @returns {string} 分组标签
+ */
+function getPendingTag(tasks: TodoItem[]) {
   const count = getPendingCount(tasks)
   return count > 0 ? `${count} 项未完成` : '已清空'
 }
 
-const getFirstPendingTask = (tasks: TodoItem[]) => {
+/**
+ * 获取首个未完成任务。
+ * @param {TodoItem[]} tasks 任务列表
+ * @returns {TodoItem | undefined} 首个未完成任务
+ */
+function getFirstPendingTask(tasks: TodoItem[]) {
   return tasks.find(task => !isCompleted(task))
 }
 
-const getCommonSummary = (tasks: TodoItem[], emptyText: string) => {
+/**
+ * 获取普通任务分组摘要。
+ * @param {TodoItem[]} tasks 任务列表
+ * @param {string} emptyText 空状态文案
+ * @returns {string} 分组摘要
+ */
+function getCommonSummary(tasks: TodoItem[], emptyText: string) {
   const firstPending = getFirstPendingTask(tasks)
   if (firstPending) return `最近：${firstPending.title}`
   return tasks.length > 0 ? '已全部完成' : emptyText
 }
 
-const getHabitSummary = (tasks: TodoItem[], emptyText: string) => {
+/**
+ * 获取习惯分组摘要。
+ * @param {TodoItem[]} tasks 任务列表
+ * @param {string} emptyText 空状态文案
+ * @returns {string} 分组摘要
+ */
+function getHabitSummary(tasks: TodoItem[], emptyText: string) {
   const firstPending = getFirstPendingTask(tasks)
   if (firstPending) return `待打卡：${firstPending.title}`
   return tasks.length > 0 ? '今日已完成' : emptyText
 }
 
-const getProgressTag = () => {
+/**
+ * 获取长期进度分组标签。
+ * @returns {string} 进度标签
+ */
+function getProgressTag() {
   const count = getPendingCount(progressTasks.value)
   return count > 0 ? `${count} 项进行中` : '已达成'
 }
 
-const getProgressSummary = () => {
+/**
+ * 获取长期进度分组摘要。
+ * @returns {string} 进度摘要
+ */
+function getProgressSummary() {
   const firstPending = getFirstPendingTask(progressTasks.value)
   if (!firstPending) return progressTasks.value.length > 0 ? '全部目标已达成' : '暂无长期进度'
   return `${firstPending.title} · ${firstPending.progress_percentage || 0}%`
 }
 
-const toggleSection = (key: TodoSectionKey) => {
+/**
+ * 切换打卡分组展开状态。
+ * @param {TodoSectionKey} key 分组 key
+ * @returns {void}
+ */
+function toggleSection(key: TodoSectionKey) {
   activeSectionKey.value = activeSectionKey.value === key ? null : key
 }
 
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const m = (date.getMonth() + 1).toString().padStart(2, '0')
-  const d = date.getDate().toString().padStart(2, '0')
-  const h = date.getHours().toString().padStart(2, '0')
-  const min = date.getMinutes().toString().padStart(2, '0')
-  return `${m}-${d} ${h}:${min}`
+/**
+ * 切换顶部标签内容。
+ * @param {TodoTabKey} tab 标签 key
+ * @returns {void}
+ */
+function switchTab(tab: TodoTabKey) {
+  activeTab.value = tab
 }
 
-
-
-const fetchTodos = async () => {
-  try {
-    const data = await API.todo.getTodos()
-    todos.value = data
-  } catch (e) {
-    console.error('Failed to fetch todos:', e)
-    uni.showToast({ title: '加载失败', icon: 'none' })
-  }
-}
-
+/**
+ * 切换任务完成或习惯打卡状态。
+ * @param {TodoItem} task 任务项
+ * @returns {Promise<void>}
+ */
 const handleToggle = withAsyncLock(async (task: TodoItem) => {
   uni.showLoading({ title: '更新中...' })
   try {
@@ -221,7 +279,6 @@ const handleToggle = withAsyncLock(async (task: TodoItem) => {
     } else {
       await API.todo.toggleTodoComplete(task.id)
     }
-    // 操作成功后统一重新获取列表
     await fetchTodos()
     uni.hideLoading()
   } catch (e) {
@@ -231,33 +288,50 @@ const handleToggle = withAsyncLock(async (task: TodoItem) => {
   }
 })
 
-// --- Progress Popup ---
-const progressPopupVisible = ref(false)
-const progressModalTask = ref<TodoItem | null>(null)
-const progressInput = ref(0)
+/**
+ * 获取任务列表数据。
+ * @returns {Promise<void>}
+ */
+async function fetchTodos() {
+  try {
+    const data = await API.todo.getTodos()
+    todos.value = data
+  } catch (e) {
+    console.error('Failed to fetch todos:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  }
+}
 
-const openProgressModal = (task: TodoItem) => {
+/**
+ * 打开进度更新弹窗。
+ * @param {TodoItem} task 长期进度任务
+ * @returns {void}
+ */
+function openProgressModal(task: TodoItem) {
   progressModalTask.value = task
   progressInput.value = task.current_value || 0
   progressPopupVisible.value = true
 }
 
-const closeProgressModal = () => {
+/**
+ * 关闭进度更新弹窗。
+ * @returns {void}
+ */
+function closeProgressModal() {
   progressPopupVisible.value = false
   progressModalTask.value = null
 }
 
-const handleProgressPopupClose = () => {
-  progressPopupVisible.value = false
-  progressModalTask.value = null
-}
-
+/**
+ * 更新长期进度。
+ * @returns {Promise<void>}
+ */
 const handleUpdateProgress = withAsyncLock(async () => {
   const task = progressModalTask.value
   if (!task) return
 
   const newProgress = Number(progressInput.value)
-  if (isNaN(newProgress) || newProgress < 0) {
+  if (Number.isNaN(newProgress) || newProgress < 0) {
     return uni.showToast({ title: '请输入有效的进度值', icon: 'none' })
   }
   if (task.target_value && newProgress > task.target_value) {
@@ -277,39 +351,72 @@ const handleUpdateProgress = withAsyncLock(async () => {
     uni.showToast({ title: '更新失败', icon: 'none' })
   }
 })
-// --- End Progress Popup ---
 
-const openAddPage = () => {
+/**
+ * 打开新增任务页。
+ * @returns {void}
+ */
+function openAddPage() {
   uni.navigateTo({
     url: '/pages-sub/editTodo/editTodo?mode=add'
   })
 }
 
-const openEditPage = (task: TodoItem) => {
+/**
+ * 打开任务编辑页。
+ * @param {TodoItem} task 任务项
+ * @returns {void}
+ */
+function openEditPage(task: TodoItem) {
   uni.navigateTo({
     url: `/pages-sub/editTodo/editTodo?mode=edit&id=${task.id}`
   })
 }
 
-const goHome = () => {
+/**
+ * 删除任务并刷新当前页面列表。
+ * @param {TodoItem} task 任务项
+ * @returns {void}
+ */
+function handleDeleteTask(task: TodoItem) {
+  uni.showModal({
+    title: '确认删除',
+    content: `确定要删除「${task.title}」吗？`,
+    success: async (res) => {
+      if (!res.confirm) return
+
+      uni.showLoading({ title: '删除中...' })
+      try {
+        await API.todo.deleteTodo(task.id)
+        await fetchTodos()
+        uni.hideLoading()
+        uni.showToast({ title: '已删除', icon: 'success' })
+      } catch (e) {
+        console.error('Failed to delete todo:', e)
+        uni.hideLoading()
+        uni.showToast({ title: '删除失败', icon: 'none' })
+      }
+    }
+  })
+}
+
+/**
+ * 返回首页。
+ * @returns {void}
+ */
+function goHome() {
   uni.navigateBack({
     fail: () => {
-      // Fallback if no history
       uni.reLaunch({ url: '/pages/index/index' })
     }
   })
 }
 
-const goToPage = (pageName: string) => {
-  uni.navigateTo({
-    url: `/pages-sub/${pageName}/${pageName}`
-  })
-}
-
 onShow(() => {
-  paging.value.reload();
+  paging.value?.reload?.()
 })
 </script>
+
 <template>
   <z-paging ref="paging" bg-color="#f6f6f6" v-model="todos"
             @query="fetchTodos"
@@ -318,128 +425,53 @@ onShow(() => {
             :show-scrollbar="false"
   >
     <template #top>
-      <BackBar bgColor="#ffffff" :custom-left="true">
-        <template #left>
-          <view class="flex items-center ml-[20rpx] h-full" @click="goHome">
-            <view class="w-[40rpx] h-[40rpx] i-fa6-solid:house flex items-center justify-center"></view>
-            <text class="text-[#0f172a] text-[40rpx] font-bold  ml-[16rpx]">打卡管理</text>
-          </view>
-        </template>
-        <template #right>
-          <view class="flex items-center justify-center text-[32rpx] font-bold text-[#0f172a] h-full"
-            @click="openAddPage">新增</view>
-        </template>
-      </BackBar>
-    </template>
-
-
-    <!-- Top Navigation -->
-    <view class="flex flex-row justify-around bg-white px-[32rpx] border-b-[2rpx] border-b-solid border-[#e2e8f0]">
-      <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#2b6cee] font-600 ">
-        打卡</view>
-      <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="goToPage('todoCharts')">
-        数据
-      </view>
-      <view class="py-[24rpx] px-[32rpx] text-[28rpx] text-[#64748b] cursor-pointer" @click="openAddPage">
-        编辑</view>
-    </view>
-
-    <!-- 待办分组：收起显示摘要，展开显示可操作任务列表 -->
-    <view class="flex-1 flex flex-col h-full">
-      <view class="flex flex-col gap-[20rpx] p-[32rpx] box-border">
-        <view v-for="section in todoSections" :key="section.key"
-          class="rounded-[28rpx] bg-white overflow-hidden border-[2rpx] border-solid border-[#eef2f7]"
-          :style="{ boxShadow: section.style.shadow }">
-          <view class="flex items-center min-h-[128rpx] p-[28rpx] box-border" @click="toggleSection(section.key)">
-            <view class="w-[8rpx] h-[72rpx] rounded-[999rpx] shrink-0"
-              :style="{ backgroundColor: section.style.accent }"></view>
-            <view class="w-[64rpx] h-[64rpx] rounded-[20rpx] flex items-center justify-center ml-[20rpx] shrink-0"
-              :style="{ backgroundColor: section.style.iconBg, color: section.style.text }">
-              <text class="text-[26rpx] font-700">{{ section.title.slice(0, 1) }}</text>
+      <view class="todo-page-top bg-white">
+        <BackBar bgColor="#ffffff" :custom-left="true">
+          <template #left>
+            <view class="flex items-center ml-[20rpx] h-full" @click="goHome">
+              <view class="w-[40rpx] h-[40rpx] i-fa6-solid:house flex items-center justify-center"></view>
+              <text class="text-[#0f172a] text-[40rpx] font-bold ml-[16rpx]">打卡管理</text>
             </view>
-            <view class="flex-1 min-w-0 ml-[20rpx]">
-              <view class="flex items-center">
-                <text class="text-[30rpx] font-700 text-[#0f172a]">{{ section.title }}</text>
-                <text class="ml-[12rpx] text-[20rpx] py-[4rpx] px-[12rpx] rounded-[999rpx]"
-                  :style="{ backgroundColor: section.style.softBg, color: section.style.text }">{{ section.tag }}</text>
-              </view>
-              <text class="block mt-[10rpx] text-[24rpx] text-[#64748b] overflow-hidden whitespace-nowrap text-ellipsis">
-                {{ section.summary }}
-              </text>
-            </view>
-            <view class="flex flex-col items-end ml-[20rpx] shrink-0">
-              <text class="text-[34rpx] font-800" :style="{ color: section.style.text }">{{ section.count }}</text>
-              <view class="w-[32rpx] h-[32rpx] flex items-center justify-center mt-[4rpx]"
-                :class="isSectionExpanded(section.key) ? 'i-fa6-solid:chevron-up' : 'i-fa6-solid:chevron-down'"
-                :style="{ color: section.style.text }"></view>
-            </view>
-          </view>
+          </template>
+          <template #right>
+            <view class="flex items-center justify-center text-[32rpx] font-bold text-[#0f172a] h-full"
+              @click="openAddPage">新增</view>
+          </template>
+        </BackBar>
 
-          <!-- 展开区域：当前分组展示完整任务操作，其他分组只保留摘要入口 -->
-          <view v-if="isSectionExpanded(section.key)"
-            class="px-[28rpx] pb-[28rpx] border-t-[2rpx] border-t-solid border-[#eef2f7]">
-            <view class="h-[20rpx]"></view>
-
-            <view class="flex flex-col gap-[16rpx]">
-              <view v-for="task in section.tasks" :key="task.id + '-' + section.key + '-' + task.is_completed + '-' + task.progress_percentage"
-                class="rounded-[18rpx] p-[18rpx] text-[24rpx] flex flex-col"
-                :style="{ backgroundColor: section.style.softBg, color: section.style.text }"
-                @longpress="openEditPage(task)"
-                @click="section.key === 'progress' ? openProgressModal(task) : handleToggle(task)">
-                <template v-if="section.key === 'progress'">
-                  <view class="flex justify-between text-[22rpx] mb-[10rpx]">
-                    <text class="flex-1 overflow-hidden whitespace-nowrap text-ellipsis mr-[10rpx]"
-                      :class="{ 'line-through opacity-70': task.progress_percentage !== undefined && task.progress_percentage >= 100 }">
-                      {{ task.title }}
-                    </text>
-                    <text class="shrink-0"
-                      :class="{ 'line-through opacity-70': task.progress_percentage !== undefined && task.progress_percentage >= 100 }">
-                      {{ task.current_value || 0 }}/{{ task.target_value || 0 }}{{ task.unit }}
-                    </text>
-                  </view>
-                  <view class="flex items-center">
-                    <view class="w-full h-[12rpx] rounded-[999rpx] overflow-hidden bg-[rgba(255,255,255,0.7)]">
-                      <view class="h-full rounded-[999rpx]"
-                        :style="{ width: (task.progress_percentage || 0) + '%', backgroundColor: section.style.accent }"></view>
-                    </view>
-                    <text class="ml-[12rpx] text-[20rpx] shrink-0">{{ task.progress_percentage || 0 }}%</text>
-                  </view>
-                </template>
-                <template v-else>
-                  <view class="flex items-center">
-                    <view
-                      class="w-[34rpx] h-[34rpx] border-[2rpx] border-solid rounded-[8rpx] flex items-center justify-center shrink-0"
-                      :style="{ borderColor: section.style.text }">
-                      <view v-if="task.is_completed" class="i-fa6-solid:check text-[20rpx]"
-                        :style="{ color: section.style.text }"></view>
-                    </view>
-                    <text class="ml-[12rpx] flex-1 overflow-hidden whitespace-nowrap text-ellipsis"
-                      :class="{ 'line-through opacity-70': task.is_completed }">{{ task.title }}</text>
-                  </view>
-                  <view v-if="section.key === 'habit' || section.key === 'negativeHabit'"
-                    class="text-[20rpx] opacity-80 text-right mt-[8rpx]">
-                    坚持 {{ task.streak_days || 0 }} 天
-                  </view>
-                  <view class="mt-[8rpx] text-[20rpx] opacity-80" v-else-if="task.deadline">
-                    {{ formatDate(task.deadline) }}
-                  </view>
-                </template>
-              </view>
-
-              <!-- 空状态：展开分组没有任务时提示当前分类暂无内容 -->
-              <view v-if="section.tasks.length === 0" class="text-[24rpx] opacity-60 text-center py-[48rpx]"
-                :style="{ color: section.style.text }">
-                {{ section.emptyText }}
-              </view>
-            </view>
+        <!-- 顶部标签：随 BackBar 一起放入 z-paging top，避免滚动内容切换时顶部区域错位 -->
+        <view class="todo-top-tabs flex items-center border-b-[2rpx] border-b-solid border-[#e2e8f0]">
+          <view v-for="tab in todoTabs" :key="tab.name"
+            class="todo-top-tab relative flex-1 h-[88rpx] flex items-center justify-center text-[28rpx] font-600"
+            :class="activeTab === tab.name ? 'text-[#2b6cee]' : 'text-[#64748b]'"
+            @click="switchTab(tab.name)">
+            <text>{{ tab.title }}</text>
+            <view v-if="activeTab === tab.name"
+              class="absolute bottom-[0] left-1/2 translate-x-[-50%] w-[52rpx] h-[6rpx] rounded-[999rpx] bg-[#2b6cee]"></view>
           </view>
         </view>
       </view>
-    </view>
+    </template>
 
-    <!-- 进度更新弹窗：使用 Wot UI Popup 从底部弹出 -->
+    <!-- 页面内容：根据顶部标签展示打卡、数据或编辑面板 -->
+    <TodoCheckinPanel v-if="activeTab === 'checkin'"
+      :sections="todoSections"
+      :active-section-key="activeSectionKey"
+      @toggle-section="toggleSection"
+      @toggle-task="handleToggle"
+      @open-progress="openProgressModal"
+    />
+    <TodoChartsPanel v-else-if="activeTab === 'charts'" />
+    <TodoEditPanel v-else
+      :sections="todoSections"
+      @add="openAddPage"
+      @edit="openEditPage"
+      @delete="handleDeleteTask"
+    />
+
+    <!-- 进度更新弹窗：打卡页长期进度使用底部弹出框更新当前值 -->
     <wd-popup v-model="progressPopupVisible" position="bottom" :z-index="999" :safe-area-inset-bottom="true"
-      custom-style="border-radius: 32rpx 32rpx 0 0; overflow: hidden;" @close="handleProgressPopupClose">
+      custom-style="border-radius: 32rpx 32rpx 0 0; overflow: hidden;" @close="closeProgressModal">
       <view class="bg-[#ffffff] w-full max-h-[80vh] flex flex-col overflow-hidden box-border">
         <view class="py-[32rpx] px-[40rpx] border-b-[2rpx] border-b-solid border-[#e2e8f0] flex justify-between items-center">
           <text class="text-[36rpx] font-700 text-[#101622]">更新进度</text>
@@ -448,7 +480,7 @@ onShow(() => {
         <view class="flex-1 p-[40rpx] overflow-y-auto overflow-x-hidden">
           <view v-if="progressModalTask" class="flex flex-col gap-[32rpx] pb-[40rpx] w-full box-border overflow-hidden">
             <view class="flex flex-col gap-[16rpx] w-full box-border overflow-hidden">
-              <text class="text-[28rpx] font-600 text-[#44474e]">任务：{{ progressModalTask.title }}</text>
+              <text class="text-[28rpx] font-600 text-[#44474e] break-words">任务：{{ progressModalTask.title }}</text>
             </view>
             <view class="flex flex-col gap-[16rpx] w-full box-border overflow-hidden">
               <text class="text-[28rpx] font-600 text-[#44474e]">目标总量</text>
@@ -463,14 +495,13 @@ onShow(() => {
               <text class="text-[28rpx] font-600 text-[#44474e]">当前进度 <text class="text-[#ba1a1a]">*</text></text>
               <view class="flex items-center w-full">
                 <input
-                  class="w-full box-border py-[24rpx] px-[32rpx] rounded-[16rpx] border-[2rpx] border-solid border-[#c4c6cf] bg-[#fcfcfd] text-[26rpx] text-[#101622]"
+                  class="w-full h-[96rpx] min-h-[96rpx] leading-[96rpx] box-border px-[32rpx] rounded-[16rpx] border-[2rpx] border-solid border-[#c4c6cf] bg-[#fcfcfd] text-[30rpx] text-[#101622]"
                   v-model.number="progressInput" type="number"
                   :placeholder="String(progressModalTask.current_value || 0)" />
               </view>
-              <text class="text-[24rpx] text-[#74777f] mt-[8rpx]">当前：{{ progressModalTask.current_value || 0 }} / {{
-                progressModalTask.target_value || 0 }}{{ progressModalTask.unit }}（{{
-                  progressModalTask.progress_percentage
-                  || 0 }}%）</text>
+              <text class="text-[24rpx] text-[#74777f] mt-[8rpx] leading-[1.5] break-words">
+                当前：{{ progressModalTask.current_value || 0 }} / {{ progressModalTask.target_value || 0 }}{{ progressModalTask.unit }}（{{ progressModalTask.progress_percentage || 0 }}%）
+              </text>
             </view>
           </view>
         </view>
@@ -484,13 +515,20 @@ onShow(() => {
         </view>
       </view>
     </wd-popup>
-
   </z-paging>
-
 </template>
 
 <style scoped>
-.bg-white-50 {
-  background-color: rgba(255, 255, 255, 0.5);
+.todo-page-top {
+  background: #ffffff;
+}
+
+.todo-top-tabs {
+  height: 88rpx;
+  background: #ffffff;
+}
+
+.todo-top-tab {
+  min-width: 0;
 }
 </style>

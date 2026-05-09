@@ -49,12 +49,6 @@
       "root": "pages-sub",
       "pages": [
         {
-          "path": "todoCharts/todoCharts",
-          "style": {
-            "navigationStyle": "custom"
-          }
-        },
-        {
           "path": "editTodo/editTodo",
           "style": {
             "navigationStyle": "custom"
